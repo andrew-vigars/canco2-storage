@@ -13,6 +13,7 @@ dependencies = [
     "requests",
     "pandas",
     "geopandas",
+    "shapely",
 ]
 
 [tool.setuptools.packages.find]

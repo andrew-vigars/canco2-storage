@@ -185,6 +185,7 @@ The package currently declares the following core dependencies through `pyprojec
 - `requests`
 - `pandas`
 - `geopandas`
+- `shapely`
 
 A successful editable installation should make the package importable without modifying `PYTHONPATH`:
 

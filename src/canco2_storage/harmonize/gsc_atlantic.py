@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import warnings
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 import geopandas as gpd
@@ -33,6 +34,18 @@ import pandas as pd
 from shapely import make_valid
 
 from canco2_storage.paths import find_project_root
+
+from canco2_storage.metadata.common import (
+    CANCO2RE_SUBMISSION,
+    build_submission_stem,
+    write_readme,
+)
+
+from canco2_storage.metadata.gsc_atlantic import (
+    DATA_TYPE,
+    build_readme,
+)
+
 
 
 # =============================================================================
@@ -56,18 +69,51 @@ PROCESSED_GSC_ATLANTIC = (
     / "gsc_atlantic"
 )
 
+CREATED_DATE = date.today()
+
+SUBMISSION_STEM = build_submission_stem(
+    data_type=DATA_TYPE,
+    created_date=CREATED_DATE,
+)
+
+README_PATH = (
+    PROCESSED_GSC_ATLANTIC
+    / (
+        f"{CREATED_DATE:%Y%m%d}_{CANCO2RE_SUBMISSION.activity_code}_"
+        f"{DATA_TYPE}README_{CANCO2RE_SUBMISSION.creator_initials}.md"
+    )
+)
+
 MESOZOIC_DIR = RAW_GSC_ATLANTIC / "Mesozoic-Cenozoic COS Mapping"
 PALEOZOIC_DIR = RAW_GSC_ATLANTIC / "Upper Paleozoic COS Mapping"
 
-SILVER_GPKG_PATH = PROCESSED_GSC_ATLANTIC / "gsc_atlantic_storage.gpkg"
+SILVER_GPKG_PATH = (
+    PROCESSED_GSC_ATLANTIC
+    / f"{SUBMISSION_STEM}.gpkg"
+)
+
 SCHEMA_INVENTORY_PATH = (
-    PROCESSED_GSC_ATLANTIC / "gsc_atlantic_source_schema.csv"
+    PROCESSED_GSC_ATLANTIC
+    / (
+        f"{CREATED_DATE:%Y%m%d}_{CANCO2RE_SUBMISSION.activity_code}_"
+        f"{DATA_TYPE}SourceSchema_{CANCO2RE_SUBMISSION.creator_initials}.csv"
+    )
 )
+
 SOURCE_METADATA_PATH = (
-    PROCESSED_GSC_ATLANTIC / "gsc_atlantic_source_metadata.csv"
+    PROCESSED_GSC_ATLANTIC
+    / (
+        f"{CREATED_DATE:%Y%m%d}_{CANCO2RE_SUBMISSION.activity_code}_"
+        f"{DATA_TYPE}SourceMetadata_{CANCO2RE_SUBMISSION.creator_initials}.csv"
+    )
 )
+
 QA_SUMMARY_PATH = (
-    PROCESSED_GSC_ATLANTIC / "gsc_atlantic_qa_summary.csv"
+    PROCESSED_GSC_ATLANTIC
+    / (
+        f"{CREATED_DATE:%Y%m%d}_{CANCO2RE_SUBMISSION.activity_code}_"
+        f"{DATA_TYPE}QASummary_{CANCO2RE_SUBMISSION.creator_initials}.csv"
+    )
 )
 
 TARGET_CRS = "EPSG:3978"
@@ -111,6 +157,8 @@ NON_ENDORSEMENT_STATEMENT = (
 )
 
 ASSESSMENT_TYPE = "qualitative_chance_of_success"
+DATA_CLASS = "geological_prospectivity"
+CAPACITY_DATA = False
 CAPACITY_STATUS = "not_quantitatively_assessed"
 INJECTIVITY_STATUS = "not_quantitatively_assessed"
 
@@ -554,6 +602,8 @@ SILVER_COLUMNS = [
     "total_cos",
     "cos_components",
     "assessment_type",
+    "data_class",
+    "capacity_data",
     "capacity_status",
     "injectivity_status",
     "source_dataset",
@@ -638,6 +688,8 @@ def harmonize_layer(
             ),
             "cos_components": mapping.cos_components,
             "assessment_type": ASSESSMENT_TYPE,
+            "data_class": DATA_CLASS,
+            "capacity_data": CAPACITY_DATA,
             "capacity_status": CAPACITY_STATUS,
             "injectivity_status": INJECTIVITY_STATUS,
             "source_dataset": DATASET_ID,
@@ -774,6 +826,14 @@ def build_source_metadata(
         [
             {
                 "dataset_id": DATASET_ID,
+                "who": (
+                    f"{CANCO2RE_SUBMISSION.creator_name}, "
+                    f"CanCO2Re Activity {CANCO2RE_SUBMISSION.activity_code}"
+                ),
+                "when": CREATED_DATE.isoformat(),
+                "submission_filename": SILVER_GPKG_PATH.name,
+                "activity_code": CANCO2RE_SUBMISSION.activity_code,
+                "creator_initials": CANCO2RE_SUBMISSION.creator_initials,
                 "source_organization": SOURCE_ORGANIZATION,
                 "source_title": SOURCE_TITLE,
                 "source_publication": SOURCE_PUBLICATION,
@@ -785,6 +845,8 @@ def build_source_metadata(
                 "attribution_text": ATTRIBUTION_TEXT,
                 "non_endorsement_statement": NON_ENDORSEMENT_STATEMENT,
                 "assessment_type": ASSESSMENT_TYPE,
+                "data_class": DATA_CLASS,
+                "capacity_data": CAPACITY_DATA,
                 "capacity_status": CAPACITY_STATUS,
                 "injectivity_status": INJECTIVITY_STATUS,
                 "target_crs": TARGET_CRS,
@@ -1054,6 +1116,31 @@ def run_harmonization(
         qa_summary=qa_summary,
         source_metadata=source_metadata,
     )
+
+    readme_text = build_readme(
+        output_filename=SILVER_GPKG_PATH.name,
+        layer_name="storage_units",
+        feature_count=len(final_storage_units),
+        storage_unit_count=final_storage_units["storage_unit_id"].nunique(),
+        target_crs=TARGET_CRS,
+        source_warning_count=int(
+            qa_summary["read_warning_count"].sum()
+        ),
+        final_invalid_geometry_count=int(
+            (~final_storage_units.geometry.is_valid).sum()
+        ),
+        trap_cos_null_count=int(
+            final_storage_units["trap_cos"].isna().sum()
+        ),
+        created_date=CREATED_DATE,
+    )
+
+    write_readme(
+        README_PATH,
+        readme_text,
+    )
+
+    print(f"README:        {README_PATH}")
 
     print("\nHarmonization summary")
     print("---------------------")

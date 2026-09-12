@@ -11,6 +11,8 @@ requires-python = ">=3.12"
 
 dependencies = [
     "requests",
+    "pandas",
+    "geopandas",
 ]
 
 [tool.setuptools.packages.find]

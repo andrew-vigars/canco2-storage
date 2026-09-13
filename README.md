@@ -85,7 +85,7 @@ Future national storage database
 
 ## Current dataset workflows
 
-Three independent end-to-end public-data workflows are currently implemented.
+Four independent end-to-end public-data workflows are currently implemented.
 They share processing conventions but retain different feature grains and
 source meanings. They are not blindly concatenated into one flat table.
 
@@ -153,6 +153,23 @@ capacity_data = False
 
 These polygons represent regulatory / tenure information and must not be interpreted as geological storage capacity, injectivity, prospectivity, or project-ready storage resource.
 
+### DOE/NETL NATCARB All Data v1502
+
+**Dataset:** NATCARB All Data v1502 geological storage resources
+**Source:** U.S. Department of Energy, National Energy Technology Laboratory
+**Source resource:** <https://edx.netl.doe.gov/dataset/natcarb-alldata-v1502>
+
+The workflow harmonizes five NATCARB spatial representations: saline-resource
+and coal-resource 10 km grid cells, saline-resource and coal-resource extent
+polygons, and oil/gas storage-resource polygons. It also retains the ten
+provider domain tables required to interpret coded attributes.
+
+Grid-cell and polygon representations remain separate source products. Provider
+duplicate and overlap flags are preserved and must be considered before any
+aggregation. NATCARB storage-resource estimates are regional screening values,
+not demonstrated injectivity, permitted injection capacity, or project-ready
+capacity.
+
 ## Package structure
 
 The codebase uses a `src/` package layout:
@@ -163,6 +180,7 @@ canco2-storage/
 ├── README.md
 ├── notebooks/
 ├── scripts/
+│   ├── build_geopackages.py
 │   ├── run_bronze.py
 │   └── run_silver.py
 ├── docs/
@@ -172,19 +190,23 @@ canco2-storage/
         │   ├── common.py
         │   ├── aer_agreements.py
         │   ├── gbc_ne_atlas.py
-        │   └── gsc_atlantic.py
+        │   ├── gsc_atlantic.py
+        │   └── natcarb_doe.py
         ├── harmonize/
         │   ├── common.py
         │   ├── aer_agreements.py
         │   ├── gbc_ne_atlas.py
-        │   └── gsc_atlantic.py
+        │   ├── gsc_atlantic.py
+        │   └── natcarb_doe.py
         ├── metadata/
         │   ├── common.py
         │   ├── aer_agreements.py
         │   ├── gbc_ne_atlas.py
-        │   └── gsc_atlantic.py
+        │   ├── gsc_atlantic.py
+        │   └── natcarb_doe.py
         ├── orchestration/
         │   ├── bronze.py
+        │   ├── geopackages.py
         │   └── silver.py
         ├── execution/
         ├── schema/
@@ -219,6 +241,8 @@ The package currently declares the following core dependencies through `pyprojec
 - `pandas`
 - `geopandas`
 - `shapely`
+- `pyproj`
+- `pyogrio`
 
 A successful editable installation should make the package importable without modifying `PYTHONPATH`:
 
@@ -246,7 +270,7 @@ python scripts/run_bronze.py --dataset gbc_ne_atlas --dataset gsc_atlantic
 ```
 
 The registered acquisition dataset IDs are `aer_agreements`, `gbc_ne_atlas`,
-and `gsc_atlantic`.
+`gsc_atlantic`, and `natcarb_doe`.
 
 The underlying modules can also be run directly.
 
@@ -268,15 +292,22 @@ Northeast BC Storage Atlas:
 python -m canco2_storage.acquisition.gbc_ne_atlas
 ```
 
+DOE/NETL NATCARB All Data v1502:
+
+```bash
+python -m canco2_storage.acquisition.natcarb_doe
+```
+
 Use `--overwrite` to redownload and re-extract a source dataset:
 
 ```bash
 python -m canco2_storage.acquisition.gsc_atlantic --overwrite
 python -m canco2_storage.acquisition.aer_agreements --overwrite
 python -m canco2_storage.acquisition.gbc_ne_atlas --overwrite
+python -m canco2_storage.acquisition.natcarb_doe --overwrite
 ```
 
-Both acquisition modules also accept `--raw-dir` for an alternate Bronze output directory.
+Acquisition modules also accept `--raw-dir` for an alternate Bronze output directory.
 
 ### 2. Inspect source schemas without building Silver outputs
 
@@ -288,7 +319,7 @@ python -m canco2_storage.harmonize.gbc_ne_atlas --inspect-only
 
 ### 3. Build Silver outputs
 
-Run all registered Silver workflows, including BC README generation:
+Run all registered Silver workflows, including dataset README generation where implemented:
 
 ```bash
 python scripts/run_silver.py
@@ -301,8 +332,8 @@ python scripts/run_silver.py --dataset aer_agreements
 python scripts/run_silver.py --dataset gbc_ne_atlas --dataset gsc_atlantic
 ```
 
-The registered Silver dataset IDs are `aer_agreements`, `gbc_ne_atlas`, and
-`gsc_atlantic`.
+The registered Silver dataset IDs are `aer_agreements`, `gbc_ne_atlas`,
+`gsc_atlantic`, and `natcarb_doe`.
 
 The underlying harmonizers can also be run directly.
 
@@ -310,9 +341,28 @@ The underlying harmonizers can also be run directly.
 python -m canco2_storage.harmonize.gsc_atlantic
 python -m canco2_storage.harmonize.aer_agreements
 python -m canco2_storage.harmonize.gbc_ne_atlas
+python -m canco2_storage.harmonize.natcarb_doe
 ```
 
 The harmonizers validate the persisted artifacts after writing them rather than assuming the in-memory GeoDataFrames and serialized GeoPackages are identical.
+
+### 4. Build Bronze and Silver GeoPackages together
+
+The top-level builder runs the registered Bronze acquisition workflows followed
+by the corresponding Silver workflows:
+
+```bash
+python scripts/build_geopackages.py
+```
+
+Build selected datasets, or rerun only one layer when Bronze inputs already
+exist:
+
+```bash
+python scripts/build_geopackages.py --datasets natcarb_doe aer_agreements
+python scripts/build_geopackages.py --skip-bronze
+python scripts/build_geopackages.py --skip-silver
+```
 
 ## Output conventions
 

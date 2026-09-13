@@ -24,7 +24,6 @@ The original Bronze files are never modified.
 from __future__ import annotations
 
 import argparse
-import warnings
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -46,6 +45,12 @@ from canco2_storage.metadata.gsc_atlantic import (
     build_readme,
 )
 
+from canco2_storage.harmonize.common import (
+    SILVER_CRS,
+    read_source_layer,
+    repair_geometries,
+    validate_target_crs,
+)
 
 
 # =============================================================================
@@ -116,7 +121,7 @@ QA_SUMMARY_PATH = (
     )
 )
 
-TARGET_CRS = "EPSG:3978"
+TARGET_CRS = SILVER_CRS
 EXPECTED_SHAPEFILE_COUNT = 15
 
 
@@ -390,23 +395,6 @@ def discover_shapefiles() -> list[Path]:
     return shapefiles
 
 
-def read_source_layer(
-    path: Path,
-) -> tuple[gpd.GeoDataFrame, list[str]]:
-    """Read one source layer and capture provider/driver geometry warnings."""
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        gdf = gpd.read_file(path)
-
-    warning_messages = [str(item.message) for item in caught]
-
-    if gdf.crs is None:
-        raise ValueError(f"Source shapefile has no CRS: {path}")
-
-    return gdf, warning_messages
-
-
 def inspect_shapefile(path: Path) -> dict[str, object]:
     """Inspect one source shapefile without modifying the Bronze data."""
 
@@ -529,60 +517,6 @@ def numeric_cos(
 # =============================================================================
 # Geometry normalization
 # =============================================================================
-
-
-def repair_geometries(
-    gdf: gpd.GeoDataFrame,
-) -> tuple[gpd.GeoDataFrame, int, int]:
-    """Repair topologically invalid geometries without altering Bronze files.
-
-    Parameters
-    ----------
-    gdf : geopandas.GeoDataFrame
-        Geospatial layer to validate and repair.
-
-    Returns
-    -------
-    tuple
-        Repaired GeoDataFrame, invalid count before repair, and invalid count
-        after repair.
-
-    Raises
-    ------
-    ValueError
-        If geometries remain invalid after repair.
-    """
-
-    result = gdf.copy()
-
-    non_null = result.geometry.notna()
-    invalid_before_mask = non_null & ~result.geometry.is_valid
-    invalid_before = int(invalid_before_mask.sum())
-
-    if invalid_before:
-        result.loc[invalid_before_mask, "geometry"] = (
-            result.loc[invalid_before_mask, "geometry"]
-            .apply(make_valid)
-        )
-
-    invalid_after_mask = result.geometry.notna() & ~result.geometry.is_valid
-    invalid_after = int(invalid_after_mask.sum())
-
-    if invalid_after:
-        raise ValueError(
-            f"Geometry repair left {invalid_after} invalid geometries."
-        )
-
-    return result, invalid_before, invalid_after
-
-
-def validate_target_crs(gdf: gpd.GeoDataFrame) -> None:
-    """Validate that a GeoDataFrame uses the project Silver CRS."""
-
-    if gdf.crs is None or gdf.crs.to_epsg() != 3978:
-        raise ValueError(
-            f"Expected Silver CRS {TARGET_CRS}, found {gdf.crs}."
-        )
 
 
 # =============================================================================
@@ -709,7 +643,10 @@ def harmonize_layer(
     )
 
     silver = silver[SILVER_COLUMNS].to_crs(TARGET_CRS)
-    validate_target_crs(silver)
+    validate_target_crs(
+        silver,
+        target_crs=TARGET_CRS,
+    )
 
     # Reprojection itself can expose or create topology issues. Repair again in
     # the canonical Silver CRS so the in-memory artifact is valid before export.
@@ -898,7 +835,10 @@ def validate_written_storage_layer(
         SILVER_GPKG_PATH,
         layer="storage_units",
     )
-    validate_target_crs(written)
+    validate_target_crs(
+        written,
+        target_crs=TARGET_CRS,
+    )
 
     if len(written) != len(expected):
         raise ValueError(
@@ -969,7 +909,10 @@ def validate_written_storage_layer(
             SILVER_GPKG_PATH,
             layer="storage_units",
         )
-        validate_target_crs(written)
+        validate_target_crs(
+        written,
+        target_crs=TARGET_CRS,
+    )
 
     invalid_after = int((~written.geometry.is_valid).sum())
 

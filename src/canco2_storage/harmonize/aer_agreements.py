@@ -31,14 +31,12 @@ from __future__ import annotations
 
 import argparse
 import sqlite3
-import warnings
 from datetime import date
 from pathlib import Path
 from typing import TypedDict
 
 import geopandas as gpd
 import pandas as pd
-from shapely import make_valid
 
 from canco2_storage.paths import find_project_root
 
@@ -51,6 +49,16 @@ from canco2_storage.metadata.common import (
 from canco2_storage.metadata.aer_agreements import (
     DATA_TYPE,
     build_readme,
+)
+
+from canco2_storage.harmonize.common import (
+    SILVER_CRS,
+    project_and_measure,
+    read_source_layer,
+    repair_geometries,
+    validate_registered_tables,
+    validate_written_spatial_layer,
+    write_registered_attribute_table,
 )
 
 # =============================================================================
@@ -127,7 +135,7 @@ TRACT_FIELD_DICTIONARY_PATH = (
     )
 )
 
-TARGET_CRS = "EPSG:3978"
+TARGET_CRS = SILVER_CRS
 EXPECTED_SOURCE_CRS = "EPSG:3400"
 EXPECTED_SHAPEFILE_NAME = "CS_Agreements.shp"
 
@@ -645,23 +653,6 @@ def discover_source_shapefile() -> Path:
     return path
 
 
-def read_source_layer(
-    path: Path,
-) -> tuple[gpd.GeoDataFrame, list[str]]:
-    """Read the Bronze shapefile and capture provider/driver warnings."""
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        gdf = gpd.read_file(path)
-
-    warning_messages = [str(item.message) for item in caught]
-
-    if gdf.crs is None:
-        raise ValueError(f"Source shapefile has no CRS: {path}")
-
-    return gdf, warning_messages
-
-
 def build_schema_inventory(
     path: Path,
 ) -> pd.DataFrame:
@@ -723,49 +714,6 @@ def validate_source_schema(
         raise ValueError(
             f"Expected source CRS {EXPECTED_SOURCE_CRS}, found {gdf.crs}."
         )
-
-
-# =============================================================================
-# Geometry normalization
-# =============================================================================
-
-
-def repair_geometries(
-    gdf: gpd.GeoDataFrame,
-) -> tuple[gpd.GeoDataFrame, int, int]:
-    """Repair topologically invalid geometries without altering Bronze files."""
-
-    result = gdf.copy()
-
-    non_null = result.geometry.notna()
-    invalid_before_mask = non_null & ~result.geometry.is_valid
-    invalid_before = int(invalid_before_mask.sum())
-
-    if invalid_before:
-        result.loc[invalid_before_mask, "geometry"] = (
-            result.loc[invalid_before_mask, "geometry"]
-            .apply(make_valid)
-        )
-
-    invalid_after_mask = result.geometry.notna() & ~result.geometry.is_valid
-    invalid_after = int(invalid_after_mask.sum())
-
-    if invalid_after:
-        raise ValueError(
-            f"Geometry repair left {invalid_after} invalid geometries."
-        )
-
-    return result, invalid_before, invalid_after
-
-
-def validate_target_crs(gdf: gpd.GeoDataFrame) -> None:
-    """Require the canonical Silver CRS."""
-
-    if gdf.crs is None or gdf.crs.to_epsg() != 3978:
-        raise ValueError(
-            f"Expected Silver CRS {TARGET_CRS}, found {gdf.crs}."
-        )
-
 
 # =============================================================================
 # Attribute normalization
@@ -919,16 +867,12 @@ def build_tract_layer(
         ]
     ].copy()
 
-    clean = clean.to_crs(TARGET_CRS)
-    validate_target_crs(clean)
-
     clean, invalid_projected_before, invalid_projected_after = (
-        repair_geometries(clean)
+        project_and_measure(
+            clean,
+            target_crs=TARGET_CRS,
+        )
     )
-
-    clean["geometry_area_m2"] = clean.geometry.area
-    clean["geometry_area_ha"] = clean["geometry_area_m2"] / 10_000.0
-    clean["geometry_perimeter_m"] = clean.geometry.length
 
     measurement_check["geometry_area_m2"] = clean["geometry_area_m2"].to_numpy()
     measurement_check["geometry_perimeter_m"] = (
@@ -1280,106 +1224,6 @@ def build_field_dictionaries() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     return tract_dictionary, agreement_dictionary
 
-
-# =============================================================================
-# Post-export validation
-# =============================================================================
-
-
-def validate_written_spatial_layer(
-    *,
-    layer_name: str,
-    expected: gpd.GeoDataFrame,
-    unique_id_field: str,
-) -> gpd.GeoDataFrame:
-    """Reopen and validate one persisted Silver spatial layer."""
-
-    written = gpd.read_file(
-        SILVER_GPKG_PATH,
-        layer=layer_name,
-    )
-
-    validate_target_crs(written)
-
-    if len(written) != len(expected):
-        raise ValueError(
-            f"{layer_name} feature count changed during export: "
-            f"{len(written)} != {len(expected)}."
-        )
-
-    if written[unique_id_field].duplicated().any():
-        raise ValueError(
-            f"{layer_name} contains duplicate {unique_id_field} values."
-        )
-
-    if set(written[unique_id_field]) != set(expected[unique_id_field]):
-        raise ValueError(
-            f"{layer_name} identifiers changed during export."
-        )
-
-    null_count = int(written.geometry.isna().sum())
-    empty_count = int(written.geometry.is_empty.sum())
-    invalid_count = int((~written.geometry.is_valid).sum())
-
-    if null_count:
-        raise ValueError(
-            f"{layer_name} contains {null_count} null geometries."
-        )
-
-    if empty_count:
-        raise ValueError(
-            f"{layer_name} contains {empty_count} empty geometries."
-        )
-
-    if invalid_count:
-        raise ValueError(
-            f"{layer_name} contains {invalid_count} invalid geometries "
-            "after GeoPackage serialization."
-        )
-
-    return written
-
-
-def validate_registered_tables() -> None:
-    """Require the metadata and QA tables to be registered in the GeoPackage."""
-
-    with sqlite3.connect(SILVER_GPKG_PATH) as conn:
-        contents = pd.read_sql_query(
-            """
-            SELECT table_name, data_type
-            FROM gpkg_contents
-            """,
-            conn,
-        )
-
-    expected = {
-        "aer_agreement_tracts": "features",
-        "aer_agreements": "features",
-        "metadata_aer_agreements": "attributes",
-        "qa_aer_agreements": "attributes",
-    }
-
-    actual = dict(
-        zip(
-            contents["table_name"],
-            contents["data_type"],
-            strict=False,
-        )
-    )
-
-    missing_or_wrong = {
-        name: data_type
-        for name, data_type in expected.items()
-        if actual.get(name) != data_type
-    }
-
-    if missing_or_wrong:
-        raise ValueError(
-            "GeoPackage contents are missing expected registered layers/tables: "
-            f"{missing_or_wrong}"
-        )
-
-
 # =============================================================================
 # Export
 # =============================================================================
@@ -1418,51 +1262,21 @@ def export_outputs(
     )
 
     with sqlite3.connect(SILVER_GPKG_PATH) as conn:
-        metadata.to_sql(
-            "metadata_aer_agreements",
+        write_registered_attribute_table(
             conn,
-            if_exists="replace",
-            index=False,
-        )
-
-        qa.to_sql(
-            "qa_aer_agreements",
-            conn,
-            if_exists="replace",
-            index=False,
-        )
-
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO gpkg_contents (
-                table_name,
-                data_type,
-                identifier,
-                description
-            )
-            VALUES (?, 'attributes', ?, ?)
-            """,
-            (
-                "metadata_aer_agreements",
-                "metadata_aer_agreements",
-                "Dataset-level provenance, processing, and use metadata.",
+            dataframe=metadata,
+            table_name="metadata_aer_agreements",
+            description=(
+                "Dataset-level provenance, processing, and use metadata."
             ),
         )
 
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO gpkg_contents (
-                table_name,
-                data_type,
-                identifier,
-                description
-            )
-            VALUES (?, 'attributes', ?, ?)
-            """,
-            (
-                "qa_aer_agreements",
-                "qa_aer_agreements",
-                "Dataset-level quality-assurance and validation summary.",
+        write_registered_attribute_table(
+            conn,
+            dataframe=qa,
+            table_name="qa_aer_agreements",
+            description=(
+                "Dataset-level quality-assurance and validation summary."
             ),
         )
 
@@ -1482,18 +1296,28 @@ def export_outputs(
     )
 
     final_tracts = validate_written_spatial_layer(
+        gpkg_path=SILVER_GPKG_PATH,
         layer_name="aer_agreement_tracts",
         expected=tract_gdf,
         unique_id_field="source_feature_uid",
     )
 
     final_agreements = validate_written_spatial_layer(
+        gpkg_path=SILVER_GPKG_PATH,
         layer_name="aer_agreements",
         expected=agreement_gdf,
         unique_id_field="agreement_id",
     )
 
-    validate_registered_tables()
+    validate_registered_tables(
+        gpkg_path=SILVER_GPKG_PATH,
+        expected={
+            "aer_agreement_tracts": "features",
+            "aer_agreements": "features",
+            "metadata_aer_agreements": "attributes",
+            "qa_aer_agreements": "attributes",
+        },
+    )
 
     print("\nSilver outputs")
     print("--------------")

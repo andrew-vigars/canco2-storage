@@ -207,10 +207,8 @@ canco2-storage/
         ├── orchestration/
         │   ├── bronze.py
         │   ├── geopackages.py
-        │   └── silver.py
-        ├── execution/
+        │   └── silver.py        
         ├── schema/
-        ├── validation/
         └── paths.py
 ```
 
@@ -433,7 +431,7 @@ Source CRSs are retained in provenance fields and source geometries are repaired
 
 ## Combining the Silver products
 
-The three products are currently independent GeoPackages. They share common
+The four products are currently independent GeoPackages. They share common
 processing conventions, provenance fields, geometry validation, and EPSG:3978,
 but they represent different feature grains:
 

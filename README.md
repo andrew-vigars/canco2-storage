@@ -2,11 +2,11 @@
 
 `canco2-storage` is a Python package for acquiring, harmonizing, validating, documenting, and publishing heterogeneous Canadian geological CO₂ storage datasets as reproducible Silver-layer products.
 
-The repository is being developed to support a source-unified national geological storage data foundation for CanCO₂Re and downstream research workflows. The emphasis is on preserving source meaning, provenance, uncertainty, licensing constraints, and spatial integrity rather than forcing unlike datasets into a single interpretation.
+The repository is being developed to support a source-unified national geological storage data foundation for downstream research workflows. The emphasis is on preserving source meaning, provenance, uncertainty, licensing constraints, and spatial integrity rather than forcing unlike datasets into a single interpretation.
 
 ## Purpose
 
-Canadian geological CO₂ storage information is distributed across government, academic, research, and commercial sources. These datasets can differ substantially in:
+Canadian geological CO₂ storage information is distributed across government sources. These datasets can differ substantially in:
 
 - spatial representation and geological resolution;
 - naming conventions and source identifiers;
@@ -30,11 +30,11 @@ This repository is responsible for:
 - harmonizing source-specific fields into explicit Silver schemas;
 - preserving source identifiers, provenance, and source-specific meaning;
 - repairing and validating spatial geometries without modifying Bronze data;
-- standardizing Silver spatial products to the CanCO₂Re GIS CRS, EPSG:3978;
+- standardizing Silver spatial products to Canada Atlas Lambert CRS, EPSG:3978;
 - generating dataset-level metadata, QA outputs, schema inventories, and field dictionaries;
 - producing portable GeoPackage-based Silver datasets;
-- generating human-readable dataset README files using shared CanCO₂Re submission metadata;
-- supporting future integration into a national CanCO₂Re geological storage database.
+- generating human-readable dataset README files;
+- supporting future integration into a national geological storage database.
 
 This repository is **not** responsible for:
 
@@ -81,17 +81,12 @@ Silver harmonization
         |
         v
 Future national storage database
-        |
-        +--> GIS analysis
-        +--> Geospatial-CANOE
-        +--> NCAF / routing workflows
-        +--> storage characterization
-        +--> scenario and uncertainty analysis
-```
 
 ## Current dataset workflows
 
-Two end-to-end public-data workflows are currently implemented.
+Three independent end-to-end public-data workflows are currently implemented.
+They share processing conventions but retain different feature grains and
+source meanings. They are not blindly concatenated into one flat table.
 
 ### Geological Survey of Canada Open File 8996
 
@@ -113,10 +108,37 @@ injectivity_status = not_quantitatively_assessed
 
 COS attributes are preserved as geological prospectivity indicators and are not interpreted as quantified storage capacity or injectivity.
 
+### Northeast BC Geological Carbon Capture and Storage Atlas
+
+**Dataset:** Northeast BC Geological Carbon Capture and Storage Atlas  
+**Source:** Geoscience BC Report 2023-04, prepared by Canadian Discovery Ltd.  
+**Source project:** <https://www.geosciencebc.com/projects/2022-001/>
+
+The workflow reconciles Appendix C logical pool and aquifer records with the
+published Appendix E spatial layers. It produces selected pool and aquifer
+logical-unit tables together with their spatial feature layers.
+
+The BC Atlas contains quantitative screening estimates for storage units. Pool
+and aquifer records must be interpreted at the logical-unit level; repeated or
+multipart spatial features are not additive capacity records.
+
+Important aquifer estimate fields include:
+
+```text
+p10_effective_storage_mt
+p50_effective_storage_mt
+p90_effective_storage_mt
+theoretical_storage_mt
+```
+
+The workflow also preserves source-native values and flags discrepancies or
+zero-theoretical anomalies for QA review.
+
 ### Alberta Energy Regulator Carbon Sequestration Agreements
 
 **Dataset:** Carbon Sequestration Agreements  
 **Source:** Alberta Energy Regulator (AER)
+**Source project:** <https://gis.energy.gov.ab.ca/Geoview/CarbonSequestration>
 
 The workflow acquires and harmonizes regulatory / tenure polygons associated with Alberta carbon sequestration pore-space agreements. The Silver product preserves both the source agreement-tract structure and a dissolved agreement-level layer.
 
@@ -140,20 +162,29 @@ canco2-storage/
 ├── README.md
 ├── notebooks/
 ├── scripts/
+│   ├── run_bronze.py
+│   └── run_silver.py
 ├── docs/
 └── src/
     └── canco2_storage/
         ├── acquisition/
         │   ├── common.py
         │   ├── aer_agreements.py
+        │   ├── gbc_ne_atlas.py
         │   └── gsc_atlantic.py
         ├── harmonize/
+        │   ├── common.py
         │   ├── aer_agreements.py
+        │   ├── gbc_ne_atlas.py
         │   └── gsc_atlantic.py
         ├── metadata/
         │   ├── common.py
         │   ├── aer_agreements.py
+        │   ├── gbc_ne_atlas.py
         │   └── gsc_atlantic.py
+        ├── orchestration/
+        │   ├── bronze.py
+        │   └── silver.py
         ├── execution/
         ├── schema/
         ├── validation/
@@ -163,8 +194,9 @@ canco2-storage/
 The main responsibilities are separated as follows:
 
 - `acquisition/` handles downloads, archive extraction, checksums, and Bronze validation;
-- `harmonize/` performs source-specific schema transformation, geometry processing, QA, and Silver export;
+- `harmonize/` performs source-specific schema transformation, geometry processing, QA, and Silver export; shared mechanics are in `harmonize/common.py`;
 - `metadata/` contains shared CanCO₂Re submission helpers and dataset-specific README generation;
+- `orchestration/` registers and runs the independent Bronze and Silver workflows;
 - `paths.py` provides package-aware repository-root discovery;
 - `notebooks/` contains exploratory analyses used to understand source datasets and inform production harmonizers.
 
@@ -199,6 +231,24 @@ The current source-specific modules can be run directly with Python's module int
 
 ### 1. Acquire Bronze data
 
+Run all registered acquisition workflows:
+
+```bash
+python scripts/run_bronze.py
+```
+
+Run one or more datasets selectively:
+
+```bash
+python scripts/run_bronze.py --dataset aer_agreements
+python scripts/run_bronze.py --dataset gbc_ne_atlas --dataset gsc_atlantic
+```
+
+The registered acquisition dataset IDs are `aer_agreements`, `gbc_ne_atlas`,
+and `gsc_atlantic`.
+
+The underlying modules can also be run directly.
+
 GSC Atlantic Open File 8996:
 
 ```bash
@@ -211,11 +261,18 @@ AER Carbon Sequestration Agreements:
 python -m canco2_storage.acquisition.aer_agreements
 ```
 
+Northeast BC Storage Atlas:
+
+```bash
+python -m canco2_storage.acquisition.gbc_ne_atlas
+```
+
 Use `--overwrite` to redownload and re-extract a source dataset:
 
 ```bash
 python -m canco2_storage.acquisition.gsc_atlantic --overwrite
 python -m canco2_storage.acquisition.aer_agreements --overwrite
+python -m canco2_storage.acquisition.gbc_ne_atlas --overwrite
 ```
 
 Both acquisition modules also accept `--raw-dir` for an alternate Bronze output directory.
@@ -225,13 +282,33 @@ Both acquisition modules also accept `--raw-dir` for an alternate Bronze output 
 ```bash
 python -m canco2_storage.harmonize.gsc_atlantic --inspect-only
 python -m canco2_storage.harmonize.aer_agreements --inspect-only
+python -m canco2_storage.harmonize.gbc_ne_atlas --inspect-only
 ```
 
 ### 3. Build Silver outputs
 
+Run all registered Silver workflows, including BC README generation:
+
+```bash
+python scripts/run_silver.py
+```
+
+Build selected independent packages:
+
+```bash
+python scripts/run_silver.py --dataset aer_agreements
+python scripts/run_silver.py --dataset gbc_ne_atlas --dataset gsc_atlantic
+```
+
+The registered Silver dataset IDs are `aer_agreements`, `gbc_ne_atlas`, and
+`gsc_atlantic`.
+
+The underlying harmonizers can also be run directly.
+
 ```bash
 python -m canco2_storage.harmonize.gsc_atlantic
 python -m canco2_storage.harmonize.aer_agreements
+python -m canco2_storage.harmonize.gbc_ne_atlas
 ```
 
 The harmonizers validate the persisted artifacts after writing them rather than assuming the in-memory GeoDataFrames and serialized GeoPackages are identical.
@@ -244,7 +321,7 @@ Processed outputs are written under:
 data/processed/<dataset_id>/
 ```
 
-CanCO₂Re submission filenames are generated from shared metadata using the pattern:
+Submission filenames are generated from shared metadata using the pattern:
 
 ```text
 YYYYMMDD_ActivityCode_DataType_CreatorInitials
@@ -268,6 +345,20 @@ Current Silver products include dataset-specific combinations of:
 
 The GSC workflow produces one `storage_units` feature layer containing the harmonized 15 source datasets, together with source metadata, QA, schema inventory, and generated README outputs.
 
+### Northeast BC Silver product
+
+The BC workflow produces one GeoPackage containing:
+
+- `pool_features` — spatial representations of selected pool units;
+- `pool_units` — one logical record per selected pool;
+- `aquifer_features` — spatial representations of aquifer units;
+- `aquifer_units` — one logical record per aquifer with standardized storage estimates;
+- `metadata_gbc_ne_atlas` and `qa_gbc_ne_atlas` — embedded metadata and QA tables.
+
+It also generates source-schema, source-metadata, QA-summary, and combined
+field-dictionary sidecars. Inspection diagnostics are written under the
+dataset's `inspection/` directory when requested.
+
 ### AER Silver product
 
 The AER workflow produces one GeoPackage containing:
@@ -288,6 +379,22 @@ EPSG:3978 — NAD83 / Canada Atlas Lambert
 ```
 
 Source CRSs are retained in provenance fields and source geometries are repaired when necessary before and after reprojection. Bronze source files are never modified in place.
+
+## Combining the Silver products
+
+The three products are currently independent GeoPackages. They share common
+processing conventions, provenance fields, geometry validation, and EPSG:3978,
+but they represent different feature grains:
+
+- AER agreements and agreement tracts are regulatory-tenure features;
+- BC pools and aquifers are logical storage units with spatial representations
+        and, for some units, P10/P50/P90 screening estimates;
+- GSC Atlantic features are qualitative COS prospectivity polygons.
+
+Any future national consolidation should preserve these distinctions. A
+canonical sparse feature layer or query view may expose shared fields, while
+capacity estimates, COS assessments, and tenure attributes should remain
+semantically distinct and nullable where a source does not provide them.
 
 ## Data classification philosophy
 

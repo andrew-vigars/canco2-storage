@@ -1,9 +1,29 @@
 # CANCO2-Storage Silver Schema
 
+**Schema contract:** `1.0.0`  
+**Status:** implemented Silver interface  
+**Scope:** dated GeoPackage artifacts produced by the harmonizers
+
 This document defines the implemented Silver GeoPackage contract. The
 sidecar field dictionaries and source-schema inventories are the authoritative
 field-level references for each dated output. This page records the stable
 concepts and layer grain that users need when querying multiple products.
+
+## Contract and compatibility
+
+The schema version applies to the semantic interface below, not to a source
+provider's publication version or to a dated submission filename. A patch
+release may clarify descriptions without changing field meaning, layer grain,
+or identifier behavior. A minor release may add nullable fields or new
+registered layers. A major release is required for renaming fields, changing
+units, changing record grain, changing identifier meaning, or changing the
+interpretation of an existing classification value.
+
+Every Silver package must retain its source dataset identity, source
+identifiers, source CRS where spatial input exists, and the dataset-specific
+metadata and QA tables documented below. A field dictionary shipped with a
+package remains the authoritative type and field inventory for that dated
+artifact; this document is the stable cross-package contract.
 
 ## Common conventions
 
@@ -39,6 +59,41 @@ universal storage-resource estimate:
 These fields do not make unlike datasets interchangeable. In particular,
 Chance of Success is not capacity, an agreement boundary is not a storage
 resource, and a storage-resource estimate is not demonstrated injectivity.
+
+### Semantic roles
+
+The following roles are intentionally orthogonal:
+
+| Role | Contract meaning | Current datasets |
+| --- | --- | --- |
+| `geological_storage_capacity` | Quantitative source-reported storage-resource estimates, with units and source method preserved | BC atlas, NATCARB capacity-bearing layers |
+| `geological_prospectivity` | Geological screening or likelihood evidence; it is not a mass estimate | GSC Atlantic COS |
+| `regulatory_tenure` | Rights, agreements, permits, or other regulatory spatial evidence | AER agreements |
+
+`capacity_data = False` means that quantitative capacity must not be inferred
+from the layer. Null capacity is absence of an estimate, not zero capacity.
+`injectivity_status` is separate from both capacity and prospectivity and must
+not be inferred from either one.
+
+## Optimizer boundary
+
+This Silver contract is descriptive; it does not silently encode an optimizer's
+admissibility policy. An optimizer input specification must declare, for each
+role, whether it is a hard gate, a soft score/penalty, or informational only.
+Until that policy is versioned separately, the safe default is:
+
+- capacity layers provide candidate resource estimates, not demonstrated
+	deliverability;
+- prospectivity layers provide evidence or ranking features, not capacity;
+- tenure layers provide spatial/legal evidence, not geological suitability;
+- no role may be converted to another role by filling absent values or by
+	multiplying estimates across spatial representations.
+
+The unified optimizer interface should therefore expose separate references
+to capacity, prospectivity, and tenure inputs, along with the explicit policy
+version used to combine them. A future optimizer schema may choose hard tenure
+admissibility and soft geological scoring, for example, but that choice is not
+part of Silver `1.0.0`.
 
 ## GeoPackage contract by dataset
 
@@ -144,6 +199,26 @@ Inspection-only diagnostics, such as workbook inventories, layer inventories,
 pool reconciliation, or capacity QA, are written under the dataset's
 `inspection/` directory when supported. They are diagnostics and do not replace
 the persisted GeoPackage contract.
+
+## Required cross-dataset fields
+
+The following fields are the shared query surface where a dataset supplies the
+concept. Dataset-specific layers may add fields, but must not reuse these names
+with different meanings or units:
+
+| Field | Required meaning |
+| --- | --- |
+| `storage_unit_id` | Stable identifier for one logical storage object; never a spatial-part count |
+| `storage_feature_id` or `feature_id` | Stable identifier for one spatial feature where the layer is feature-grained |
+| `source_dataset` | Repository source dataset identity |
+| `assessment_type` | Assessment or product type represented by the record |
+| `data_class` | One of the documented semantic roles, where applicable |
+| `capacity_data` | Boolean declaration that quantitative source capacity is present |
+| `geometry` | Spatial geometry in EPSG:3978 for feature layers |
+
+Logical-unit tables and spatial-feature tables are different grains. A spatial
+feature count must never be used as a capacity multiplier unless a source
+explicitly defines additive values at that grain.
 
 ## Querying guidance
 

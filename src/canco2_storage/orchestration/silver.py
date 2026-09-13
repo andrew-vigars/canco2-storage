@@ -11,6 +11,7 @@ metadata module then renders the README from the persisted artifact.
 
 from __future__ import annotations
 
+import argparse
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -26,6 +27,10 @@ SILVER_WORKFLOWS: dict[str, tuple[str, ...]] = {
     ),
     "gsc_atlantic": (
         "canco2_storage.harmonize.gsc_atlantic",
+    ),
+    "natcarb_doe": (
+        "canco2_storage.harmonize.natcarb_doe",
+        "canco2_storage.metadata.natcarb_doe",
     ),
 }
 
@@ -107,3 +112,42 @@ def run_silver(
     print("\nSilver build complete.")
     print("----------------------")
     print(f"Completed datasets: {len(selected)}")
+
+
+
+# =============================================================================
+# CLI
+# =============================================================================
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for Silver package orchestration."""
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run one or more registered CANCO2-Storage Silver build workflows."
+        )
+    )
+
+    parser.add_argument(
+        "--datasets",
+        nargs="+",
+        choices=tuple(SILVER_WORKFLOWS),
+        help=(
+            "Dataset IDs to build. Omit to run all registered Silver workflows "
+            "in registry order."
+        ),
+    )
+
+    return parser.parse_args()
+
+
+def main() -> None:
+    """Run Silver package orchestration from the command line."""
+
+    args = parse_args()
+    run_silver(args.datasets)
+
+
+if __name__ == "__main__":
+    main()

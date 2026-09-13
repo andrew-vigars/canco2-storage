@@ -8,6 +8,7 @@ organizing their own Bronze inputs.
 
 from __future__ import annotations
 
+import argparse
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -17,6 +18,7 @@ ACQUISITION_MODULES: dict[str, str] = {
     "aer_agreements": "canco2_storage.acquisition.aer_agreements",
     "gbc_ne_atlas": "canco2_storage.acquisition.gbc_ne_atlas",
     "gsc_atlantic": "canco2_storage.acquisition.gsc_atlantic",
+    "natcarb_doe": "canco2_storage.acquisition.natcarb_doe",
 }
 
 
@@ -87,3 +89,42 @@ def run_bronze(
     print("\nBronze acquisition complete.")
     print("----------------------------")
     print(f"Completed datasets: {len(selected)}")
+
+
+
+# =============================================================================
+# CLI
+# =============================================================================
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for Bronze acquisition orchestration."""
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run one or more registered CANCO2-Storage Bronze acquisition workflows."
+        )
+    )
+
+    parser.add_argument(
+        "--datasets",
+        nargs="+",
+        choices=tuple(ACQUISITION_MODULES),
+        help=(
+            "Dataset IDs to acquire. Omit to run all registered Bronze workflows "
+            "in registry order."
+        ),
+    )
+
+    return parser.parse_args()
+
+
+def main() -> None:
+    """Run Bronze acquisition from the command line."""
+
+    args = parse_args()
+    run_bronze(args.datasets)
+
+
+if __name__ == "__main__":
+    main()

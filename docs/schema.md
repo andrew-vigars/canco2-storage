@@ -95,6 +95,20 @@ version used to combine them. A future optimizer schema may choose hard tenure
 admissibility and soft geological scoring, for example, but that choice is not
 part of Silver `1.0.0`.
 
+### Cross-source identity is deferred
+
+Silver `1.0.0` does not define a conformed `basin_or_system_id`. Source-faithful
+identifiers such as `storage_unit_id`, `source_link_code`, `natcarb_id`, and
+provider resource names remain valid only within their documented source
+dataset and layer grain. They must not be treated as a cross-border or
+cross-provider join key. A future unified layer must define and version its
+cross-source identity and evidence rules before claiming that BC, Alberta,
+Saskatchewan, or NATCARB records describe the same geological system.
+
+Until that layer exists, national aggregation must assume that apparent
+geographic overlap across source packages is unresolved and must not infer
+deduplication from names, borders, or geometry alone.
+
 ## GeoPackage contract by dataset
 
 ### `aer_agreements`

@@ -154,10 +154,18 @@ representations, clip to Canada, or infer missing properties. See
 ## Reproducibility and interpretation
 
 Output filenames use the generated-date convention
-`YYYYMMDD_13_DataType_AV`. The date is evaluated when a module runs, so a new
-run creates a new dated product name rather than overwriting a prior dated
-artifact. Source provenance, source CRS, assessment classification, and QA
-results should be carried forward when products are consumed downstream.
+`YYYYMMDD_13_DataType_AV`. The harmonizer chooses the run date once and writes
+it into the persisted metadata table. README generation reads that persisted
+date, rather than using the current clock, when reconstructing sidecar
+filenames. A later run therefore creates a new dated product instead of
+overwriting an earlier artifact, while all documentation for one artifact
+uses one pinned date.
+
+This is reproducible-by-pinned-inputs, not a promise of byte-identical rebuilds:
+the source archive/workbook/GDB version, run date, Python and geospatial
+dependency versions, and output environment must be pinned for an exact rebuild.
+The current workflow preserves source checksums where acquisition provides
+them, but does not yet enforce byte-level artifact hashes.
 
 The Silver products are screening and source-preservation artifacts. They do
 not assign P10/P50/P90 scenarios across datasets, estimate injectivity, select

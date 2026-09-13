@@ -3,10 +3,12 @@
 from pathlib import Path
 
 import geopandas as gpd
+import pandas as pd
 import pytest
 from shapely.geometry import Polygon
 
 from canco2_storage.harmonize import aer_agreements, gsc_atlantic
+from canco2_storage.harmonize import gbc_ne_atlas, natcarb_doe
 
 
 @pytest.fixture(name="aer_source")
@@ -171,3 +173,184 @@ def test_gsc_golden_output_preserves_prospectivity_as_non_capacity(
     assert result.crs is not None
     assert result.crs.to_epsg() == 3978
     assert result.geometry.is_valid.all()
+
+
+def test_bc_golden_output_reconciles_capacity_and_flags_anomaly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """BC logical aquifers keep P10/P50/P90 semantics at unit grain."""
+
+    source_summary = pd.DataFrame(
+        [
+            {
+                "source_shapefile": "aquifer.shp",
+                "aquifer_name_key": "Dawson Creek",
+                "source_feature_count": 2,
+                "source_crs": "EPSG:4326",
+                "source_theoretical_storage_mt": 0.0,
+                "source_p10_storage_mt": 10.0,
+                "source_p50_storage_mt": 20.0,
+                "source_p90_storage_mt": 30.0,
+                "source_co2_phases": "supercritical",
+                "source_zero_theoretical_anomaly": True,
+                "source_read_warning_count": 0,
+                "source_read_warnings": "",
+            }
+        ]
+    )
+    appendix = pd.DataFrame(
+        [
+            {
+                "formation": "Formation A",
+                "aquifer_name": "Dawson Creek",
+                "aquifer_type": "saline",
+                "thickness_range_m": "10-20",
+                "pressure_range_mpa": "5-10",
+                "temperature_range_c": "20-30",
+                "porosity_range_pct": "10-15",
+                "co2_phase": "supercritical",
+                "p10_effective_storage_mt": 10.0,
+                "p50_effective_storage_mt": 20.0,
+                "p90_effective_storage_mt": 30.0,
+            }
+        ]
+    )
+
+    monkeypatch.setattr(
+        gbc_ne_atlas,
+        "build_aquifer_source_summary",
+        lambda paths: source_summary.copy(),
+    )
+    monkeypatch.setattr(
+        gbc_ne_atlas,
+        "read_aquifer_workbook",
+        lambda workbook_path: appendix.copy(),
+    )
+
+    result = gbc_ne_atlas.build_aquifer_units(
+        [Path("aquifer.shp")],
+        workbook_path=Path("Appendix C.xlsx"),
+    )
+
+    record = result.iloc[0]
+    assert record[
+        [
+            "storage_unit_id",
+            "p10_effective_storage_mt",
+            "p50_effective_storage_mt",
+            "p90_effective_storage_mt",
+            "theoretical_storage_mt",
+            "theoretical_storage_method",
+            "source_zero_theoretical_anomaly",
+            "source_storage_values_match_appendix_c",
+            "capacity_data",
+        ]
+    ].to_dict() == {
+        "storage_unit_id": "gbc_aquifer_dawson_creek",
+        "p10_effective_storage_mt": 10.0,
+        "p50_effective_storage_mt": 20.0,
+        "p90_effective_storage_mt": 30.0,
+        "theoretical_storage_mt": 1000.0,
+        "theoretical_storage_method": (
+            "derived_from_appendix_c_p50_divided_by_0.02"
+        ),
+        "source_zero_theoretical_anomaly": True,
+        "source_storage_values_match_appendix_c": True,
+        "capacity_data": True,
+    }
+
+
+def test_natcarb_golden_output_preserves_capacity_flags_and_representations() -> None:
+    """NATCARB dispatch keeps capacity values and provider flags explicit."""
+
+    common = {
+        "source_fid": [7],
+        "PARTNERSHIP": ["P1"],
+        "ASSESSED": [1],
+        "OVERLAP": [1],
+        "DUPLICATE": [1],
+        "CYCLE_OF_LAST_UPDATE": ["2015"],
+    }
+    grid_source = gpd.GeoDataFrame(
+        {
+            **common,
+            "COL_ROW": ["1_1"],
+            "RESOURCE_NAME": ["Saline A"],
+            "VOL_LOW": [100.0],
+            "VOL_MED": [200.0],
+            "VOL_HIGH": [300.0],
+            "RSC_AREA_CELL": [1000.0],
+            "ARRA_PROJECT": ["ARRA-1"],
+            "BASIN_NAME": ["Basin A"],
+            "MED_CALCED": [1],
+            "DEPTH_FT": [1000.0],
+            "THICKNESS_FT": [100.0],
+            "SALINITY_TDS": [1000.0],
+            "PRESSURE_PSI": [100.0],
+            "TEMPERATURE_F": [68.0],
+            "POROSITY_PCT": [10.0],
+            "PERMEABILITY_mD": [1.0],
+        },
+        geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 0)])],
+        crs="EPSG:4326",
+    )
+    extent_source = gpd.GeoDataFrame(
+        {
+            **common,
+            "ARRA_PROJECT": ["ARRA-1"],
+            "RESOURCE_NAME": ["Saline A"],
+            "BASIN_NAME": ["Basin A"],
+        },
+        geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 0)])],
+        crs="EPSG:4326",
+    )
+
+    grid = natcarb_doe.harmonize_layer(
+        grid_source,
+        natcarb_doe.LAYER_SPECS[0],
+    )
+    extent = natcarb_doe.harmonize_layer(
+        extent_source,
+        natcarb_doe.LAYER_SPECS[1],
+    )
+    capacity_qa = natcarb_doe.build_capacity_qa(
+        grid,
+        "saline_resource_cells",
+    ).set_index("check")["count"].to_dict()
+
+    assert grid[
+        [
+            "representation",
+            "storage_p10_tonnes",
+            "storage_p50_tonnes",
+            "storage_p90_tonnes",
+            "p50_method",
+            "overlap",
+            "duplicate",
+            "capacity_data",
+        ]
+    ].to_dict("records") == [
+        {
+            "representation": "resource_grid_cell",
+            "storage_p10_tonnes": 100.0,
+            "storage_p50_tonnes": 200.0,
+            "storage_p90_tonnes": 300.0,
+            "p50_method": "natural_log_mean",
+            "overlap": True,
+            "duplicate": True,
+            "capacity_data": True,
+        }
+    ]
+    assert capacity_qa["rows"] == 1
+    assert capacity_qa["overlap_rows"] == 1
+    assert capacity_qa["duplicate_rows"] == 1
+    assert capacity_qa["p10_gt_p50"] == 0
+    assert capacity_qa["p50_gt_p90"] == 0
+    assert extent["representation"].tolist() == ["resource_extent"]
+    assert extent["capacity_data"].tolist() == [False]
+    assert len(natcarb_doe.LAYER_SPECS) == 5
+    assert {spec.representation for spec in natcarb_doe.LAYER_SPECS} == {
+        "resource_grid_cell",
+        "resource_extent",
+        "storage_resource",
+    }

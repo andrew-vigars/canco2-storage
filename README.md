@@ -112,7 +112,7 @@ COS attributes are preserved as geological prospectivity indicators and are not 
 ### Northeast BC Geological Carbon Capture and Storage Atlas
 
 **Dataset:** Northeast BC Geological Carbon Capture and Storage Atlas  
-**Source:** Geoscience BC Report 2023-04, prepared by Canadian Discovery Ltd.  
+**Source:** Geoscience BC Report 2023-04, prepared by Canadian Discovery Ltd.
 **Source project:** <https://www.geosciencebc.com/projects/2022-001/>
 
 The workflow reconciles Appendix C logical pool and aquifer records with the

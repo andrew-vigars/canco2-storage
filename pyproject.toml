@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "canco2-storage"
+version = "0.1.0"
+description = "Canadian geological CO2 storage data acquisition and harmonization workflows."
+readme = "README.md"
+requires-python = ">=3.12"
+
+dependencies = [
+    "requests",
+    "pandas",
+    "geopandas",
+    "shapely",
+    "pyproj",
+    "pyogrio",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

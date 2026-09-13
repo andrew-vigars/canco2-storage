@@ -9,9 +9,6 @@ venv/
 .vscode/
 .idea/
 
-# Jupyter
-.ipynb_checkpoints/
-
 # Local data
 data/raw/*
 data/processed/*

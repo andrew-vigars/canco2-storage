@@ -16,7 +16,8 @@ Workflow
 4. Standardize geological-unit, COS, provenance, and assessment metadata.
 5. Repair invalid geometries when required and reproject to EPSG:3978.
 6. Concatenate all source layers into one Silver GeoPackage layer.
-7. Export source metadata and QA summaries alongside the GeoPackage.
+7. Persist dataset-level metadata and QA tables inside the GeoPackage.
+8. Export reproducible source-schema, metadata, QA, and field-dictionary sidecars.
 
 The original Bronze files are never modified.
 """
@@ -24,6 +25,7 @@ The original Bronze files are never modified.
 from __future__ import annotations
 
 import argparse
+import sqlite3
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -37,19 +39,15 @@ from canco2_storage.paths import find_project_root
 from canco2_storage.metadata.common import (
     CANCO2RE_SUBMISSION,
     build_submission_stem,
-    write_readme,
-)
-
-from canco2_storage.metadata.gsc_atlantic import (
-    DATA_TYPE,
-    build_readme,
 )
 
 from canco2_storage.harmonize.common import (
     SILVER_CRS,
     read_source_layer,
     repair_geometries,
+    validate_registered_tables,
     validate_target_crs,
+    write_registered_attribute_table,
 )
 
 
@@ -74,19 +72,12 @@ PROCESSED_GSC_ATLANTIC = (
     / "gsc_atlantic"
 )
 
+DATA_TYPE = "AtlanticStorageCOS"
 CREATED_DATE = date.today()
 
 SUBMISSION_STEM = build_submission_stem(
     data_type=DATA_TYPE,
     created_date=CREATED_DATE,
-)
-
-README_PATH = (
-    PROCESSED_GSC_ATLANTIC
-    / (
-        f"{CREATED_DATE:%Y%m%d}_{CANCO2RE_SUBMISSION.activity_code}_"
-        f"{DATA_TYPE}README_{CANCO2RE_SUBMISSION.creator_initials}.md"
-    )
 )
 
 MESOZOIC_DIR = RAW_GSC_ATLANTIC / "Mesozoic-Cenozoic COS Mapping"
@@ -118,6 +109,14 @@ QA_SUMMARY_PATH = (
     / (
         f"{CREATED_DATE:%Y%m%d}_{CANCO2RE_SUBMISSION.activity_code}_"
         f"{DATA_TYPE}QASummary_{CANCO2RE_SUBMISSION.creator_initials}.csv"
+    )
+)
+
+FIELD_DICTIONARY_PATH = (
+    PROCESSED_GSC_ATLANTIC
+    / (
+        f"{CREATED_DATE:%Y%m%d}_{CANCO2RE_SUBMISSION.activity_code}_"
+        f"{DATA_TYPE}FieldDictionary_{CANCO2RE_SUBMISSION.creator_initials}.csv"
     )
 )
 
@@ -166,6 +165,9 @@ DATA_CLASS = "geological_prospectivity"
 CAPACITY_DATA = False
 CAPACITY_STATUS = "not_quantitatively_assessed"
 INJECTIVITY_STATUS = "not_quantitatively_assessed"
+
+METADATA_TABLE = "metadata_gsc_atlantic"
+QA_TABLE = "qa_gsc_atlantic"
 
 
 # =============================================================================
@@ -750,52 +752,199 @@ def harmonize_all_layers(
 
 
 # =============================================================================
-# Metadata
+# Metadata and dataset-level QA
 # =============================================================================
 
 
 def build_source_metadata(
+    output_path: Path = SILVER_GPKG_PATH,
     archive_sha256: str | None = None,
 ) -> pd.DataFrame:
-    """Build one-row source, licence, and interpretation metadata."""
+    """Build authoritative dataset-level metadata for the Silver GeoPackage."""
+
+    rows: list[tuple[str, object]] = [
+        (
+            "Who",
+            (
+                f"{CANCO2RE_SUBMISSION.creator_name}, "
+                f"CanCO2Re Activity {CANCO2RE_SUBMISSION.activity_code}"
+            ),
+        ),
+        (
+            "What",
+            (
+                "Harmonized Geological Survey of Canada Open File 8996 regional "
+                "geological CO2 storage Chance of Success (COS) mapping. The "
+                "dataset represents qualitative geological prospectivity rather "
+                "than quantified storage capacity or injectivity."
+            ),
+        ),
+        ("When", CREATED_DATE.isoformat()),
+        (
+            "Where",
+            (
+                "Atlantic Canada and adjacent offshore assessment areas "
+                f"represented by Open File 8996. Silver spatial data use {TARGET_CRS}."
+            ),
+        ),
+        (
+            "How",
+            (
+                "Derived from 15 Geological Survey of Canada Open File 8996 "
+                "shapefiles. Source COS fields are mapped to a common schema, "
+                "source feature provenance is preserved, invalid geometries are "
+                "repaired where required, geometries are reprojected to the Silver "
+                "CRS, and harmonized source features are appended without dissolving "
+                "or spatially aggregating source polygons."
+            ),
+        ),
+        ("submission_filename", output_path.name),
+        ("activity_code", CANCO2RE_SUBMISSION.activity_code),
+        ("creator_name", CANCO2RE_SUBMISSION.creator_name),
+        ("creator_initials", CANCO2RE_SUBMISSION.creator_initials),
+        ("dataset_id", DATASET_ID),
+        ("data_type", DATA_TYPE),
+        ("source_organization", SOURCE_ORGANIZATION),
+        ("source_title", SOURCE_TITLE),
+        ("source_publication", SOURCE_PUBLICATION),
+        ("source_year", SOURCE_YEAR),
+        ("source_doi", SOURCE_DOI),
+        ("source_url", SOURCE_URL),
+        ("licence_name", LICENCE_NAME),
+        ("licence_url", LICENCE_URL),
+        ("attribution_text", ATTRIBUTION_TEXT),
+        ("non_endorsement_statement", NON_ENDORSEMENT_STATEMENT),
+        ("assessment_type", ASSESSMENT_TYPE),
+        ("data_class", DATA_CLASS),
+        ("capacity_data", str(CAPACITY_DATA)),
+        ("capacity_status", CAPACITY_STATUS),
+        ("injectivity_status", INJECTIVITY_STATUS),
+        ("silver_crs", TARGET_CRS),
+        (
+            "interpretation_note",
+            (
+                "Open File 8996 provides qualitative Chance of Success mapping. "
+                "COS values are not quantitative CO2 storage capacity or "
+                "injectivity estimates. Source-reported total COS values are "
+                "preserved rather than recomputed."
+            ),
+        ),
+    ]
+
+    if archive_sha256 is not None:
+        rows.append(("source_archive_sha256", archive_sha256))
+
+    return pd.DataFrame(rows, columns=["key", "value"])
+
+
+def build_dataset_qa(
+    storage_units: gpd.GeoDataFrame,
+    qa_summary: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build authoritative dataset-level QA persisted in the GeoPackage."""
+
+    rows = [
+        (
+            "feature_layers",
+            1,
+            "One harmonized geological prospectivity feature layer is expected.",
+        ),
+        (
+            "total_spatial_features",
+            len(storage_units),
+            "Total source features preserved in the Silver storage_units layer.",
+        ),
+        (
+            "storage_units",
+            int(storage_units["storage_unit_id"].nunique()),
+            "Distinct mapped geological storage units represented.",
+        ),
+        (
+            "source_layers",
+            int(storage_units["source_file"].nunique()),
+            "Distinct GSC source shapefiles represented.",
+        ),
+        (
+            "source_read_warnings",
+            int(qa_summary["read_warning_count"].sum()),
+            "Warnings captured while reading source shapefiles.",
+        ),
+        (
+            "reservoir_cos_null",
+            int(storage_units["reservoir_cos"].isna().sum()),
+            "Null source reservoir COS values retained without imputation.",
+        ),
+        (
+            "seal_cos_null",
+            int(storage_units["seal_cos"].isna().sum()),
+            "Null source seal COS values retained without imputation.",
+        ),
+        (
+            "trap_cos_null",
+            int(storage_units["trap_cos"].isna().sum()),
+            "Null trap COS may indicate the source supplied no explicit trap field.",
+        ),
+        (
+            "total_cos_null",
+            int(storage_units["total_cos"].isna().sum()),
+            "Null source total COS values retained without imputation.",
+        ),
+        (
+            "persisted_invalid_geometries",
+            int((~storage_units.geometry.is_valid).sum()),
+            "Persisted Silver geometries are required to be valid.",
+        ),
+        (
+            "persisted_null_geometries",
+            int(storage_units.geometry.isna().sum()),
+            "Persisted Silver geometries are required to be non-null.",
+        ),
+        (
+            "silver_crs",
+            TARGET_CRS,
+            "Canonical repository Silver CRS.",
+        ),
+    ]
+
+    return pd.DataFrame(rows, columns=["check", "value", "notes"])
+
+
+def build_field_dictionary() -> pd.DataFrame:
+    """Build field definitions for the harmonized Atlantic storage layer."""
+
+    rows = [
+        ("feature_id", "Harmonized", "Stable Silver feature identifier.", None),
+        ("storage_unit_id", "Harmonized", "Stable identifier for the mapped geological storage unit.", None),
+        ("storage_unit_name", "Harmonized", "Human-readable geological storage-unit name.", None),
+        ("assessment_area", "Classification", "Regional assessment area represented by the source layer.", None),
+        ("geological_group", "Classification", "Broad source geological grouping.", None),
+        ("reservoir_cos", "Harmonized", "Source reservoir Chance of Success.", "fraction"),
+        ("seal_cos", "Harmonized", "Source seal Chance of Success.", "fraction"),
+        ("trap_cos", "Harmonized", "Source trap Chance of Success where explicitly supplied.", "fraction"),
+        ("total_cos", "Harmonized", "Source-reported combined Chance of Success.", "fraction"),
+        ("cos_components", "Classification", "COS components explicitly represented by the source layer.", None),
+        ("assessment_type", "Classification", "Dataset assessment type.", None),
+        ("data_class", "Classification", "Repository data class.", None),
+        ("capacity_data", "Classification", "Whether quantitative storage-capacity data are present.", None),
+        ("capacity_status", "Classification", "Status of quantitative storage-capacity assessment.", None),
+        ("injectivity_status", "Classification", "Status of quantitative injectivity assessment.", None),
+        ("source_dataset", "Provenance", "Repository dataset identifier.", None),
+        ("source_file", "Provenance", "Original GSC source shapefile.", None),
+        ("source_feature_id", "Provenance", "Zero-based feature position retained from the source layer.", None),
+        ("source_organization", "Provenance", "Source organization.", None),
+        ("source_title", "Provenance", "Source publication title.", None),
+        ("source_publication", "Provenance", "Source publication series and identifier.", None),
+        ("source_year", "Provenance", "Source publication year.", None),
+        ("source_doi", "Provenance", "Source DOI.", None),
+        ("source_url", "Provenance", "Source publication URL.", None),
+        ("licence_name", "Provenance", "Source licence.", None),
+        ("licence_url", "Provenance", "Source licence URL.", None),
+        ("geometry", "Spatial", "Feature geometry in the canonical repository Silver CRS.", TARGET_CRS),
+    ]
 
     return pd.DataFrame(
-        [
-            {
-                "dataset_id": DATASET_ID,
-                "who": (
-                    f"{CANCO2RE_SUBMISSION.creator_name}, "
-                    f"CanCO2Re Activity {CANCO2RE_SUBMISSION.activity_code}"
-                ),
-                "when": CREATED_DATE.isoformat(),
-                "submission_filename": SILVER_GPKG_PATH.name,
-                "activity_code": CANCO2RE_SUBMISSION.activity_code,
-                "creator_initials": CANCO2RE_SUBMISSION.creator_initials,
-                "source_organization": SOURCE_ORGANIZATION,
-                "source_title": SOURCE_TITLE,
-                "source_publication": SOURCE_PUBLICATION,
-                "source_year": SOURCE_YEAR,
-                "source_doi": SOURCE_DOI,
-                "source_url": SOURCE_URL,
-                "licence_name": LICENCE_NAME,
-                "licence_url": LICENCE_URL,
-                "attribution_text": ATTRIBUTION_TEXT,
-                "non_endorsement_statement": NON_ENDORSEMENT_STATEMENT,
-                "assessment_type": ASSESSMENT_TYPE,
-                "data_class": DATA_CLASS,
-                "capacity_data": CAPACITY_DATA,
-                "capacity_status": CAPACITY_STATUS,
-                "injectivity_status": INJECTIVITY_STATUS,
-                "target_crs": TARGET_CRS,
-                "source_archive_sha256": archive_sha256,
-                "interpretation_note": (
-                    "Open File 8996 provides qualitative Chance of Success "
-                    "mapping. COS values are not quantitative CO2 storage "
-                    "capacity or injectivity estimates. Source-reported total "
-                    "COS values are preserved rather than recomputed."
-                ),
-            }
-        ]
+        rows,
+        columns=["field", "field_class", "description", "units"],
     )
 
 
@@ -957,8 +1106,9 @@ def export_outputs(
     schema_inventory: pd.DataFrame,
     qa_summary: pd.DataFrame,
     source_metadata: pd.DataFrame,
-) -> tuple[gpd.GeoDataFrame, pd.DataFrame]:
-    """Write and validate the Atlantic Silver products."""
+    field_dictionary: pd.DataFrame,
+) -> tuple[gpd.GeoDataFrame, pd.DataFrame, pd.DataFrame]:
+    """Write, register, and validate the Atlantic Silver package."""
 
     PROCESSED_GSC_ATLANTIC.mkdir(
         parents=True,
@@ -974,6 +1124,9 @@ def export_outputs(
         driver="GPKG",
     )
 
+    # Validate and, if necessary, repair the authoritative persisted spatial layer
+    # before registering metadata tables. The spatial validator may rewrite the
+    # GeoPackage when serialization exposes invalid geometry.
     final_storage_units, post_export_qa = validate_written_storage_layer(
         expected=storage_units,
     )
@@ -983,6 +1136,39 @@ def export_outputs(
         on="source_file",
         how="left",
         validate="one_to_one",
+    )
+
+    dataset_qa = build_dataset_qa(
+        final_storage_units,
+        qa_summary,
+    )
+
+    with sqlite3.connect(SILVER_GPKG_PATH) as conn:
+        write_registered_attribute_table(
+            conn,
+            dataframe=source_metadata,
+            table_name=METADATA_TABLE,
+            description=(
+                "Authoritative dataset-level GSC Atlantic provenance, "
+                "classification, interpretation, and submission metadata."
+            ),
+        )
+        write_registered_attribute_table(
+            conn,
+            dataframe=dataset_qa,
+            table_name=QA_TABLE,
+            description=(
+                "Dataset-level GSC Atlantic Silver quality-assurance summary."
+            ),
+        )
+
+    validate_registered_tables(
+        gpkg_path=SILVER_GPKG_PATH,
+        expected={
+            "storage_units": "features",
+            METADATA_TABLE: "attributes",
+            QA_TABLE: "attributes",
+        },
     )
 
     schema_inventory.to_csv(
@@ -997,6 +1183,10 @@ def export_outputs(
         QA_SUMMARY_PATH,
         index=False,
     )
+    field_dictionary.to_csv(
+        FIELD_DICTIONARY_PATH,
+        index=False,
+    )
 
     print("\nSilver outputs")
     print("--------------")
@@ -1004,8 +1194,11 @@ def export_outputs(
     print(f"Schema inventory: {SCHEMA_INVENTORY_PATH}")
     print(f"Source metadata:  {SOURCE_METADATA_PATH}")
     print(f"QA summary:       {QA_SUMMARY_PATH}")
+    print(f"Field dictionary: {FIELD_DICTIONARY_PATH}")
+    print(f"Metadata table:   {METADATA_TABLE}")
+    print(f"QA table:         {QA_TABLE}")
 
-    return final_storage_units, qa_summary
+    return final_storage_units, qa_summary, dataset_qa
 
 
 # =============================================================================
@@ -1050,40 +1243,18 @@ def run_harmonization(
     archive_sha256 = None
 
     source_metadata = build_source_metadata(
+        output_path=SILVER_GPKG_PATH,
         archive_sha256=archive_sha256,
     )
+    field_dictionary = build_field_dictionary()
 
-    final_storage_units, qa_summary = export_outputs(
+    final_storage_units, qa_summary, dataset_qa = export_outputs(
         storage_units=storage_units,
         schema_inventory=schema_inventory,
         qa_summary=qa_summary,
         source_metadata=source_metadata,
+        field_dictionary=field_dictionary,
     )
-
-    readme_text = build_readme(
-        output_filename=SILVER_GPKG_PATH.name,
-        layer_name="storage_units",
-        feature_count=len(final_storage_units),
-        storage_unit_count=final_storage_units["storage_unit_id"].nunique(),
-        target_crs=TARGET_CRS,
-        source_warning_count=int(
-            qa_summary["read_warning_count"].sum()
-        ),
-        final_invalid_geometry_count=int(
-            (~final_storage_units.geometry.is_valid).sum()
-        ),
-        trap_cos_null_count=int(
-            final_storage_units["trap_cos"].isna().sum()
-        ),
-        created_date=CREATED_DATE,
-    )
-
-    write_readme(
-        README_PATH,
-        readme_text,
-    )
-
-    print(f"README:        {README_PATH}")
 
     print("\nHarmonization summary")
     print("---------------------")
@@ -1093,6 +1264,8 @@ def run_harmonization(
         f"{final_storage_units['storage_unit_id'].nunique():,}"
     )
     print(f"CRS:           {final_storage_units.crs}")
+    print(f"Metadata:      {METADATA_TABLE}")
+    print(f"QA table:      {QA_TABLE}")
     print(
         "Source warnings: "
         f"{int(qa_summary['read_warning_count'].sum()):,}"

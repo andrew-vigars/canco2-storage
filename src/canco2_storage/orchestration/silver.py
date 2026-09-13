@@ -27,6 +27,7 @@ SILVER_WORKFLOWS: dict[str, tuple[str, ...]] = {
     ),
     "gsc_atlantic": (
         "canco2_storage.harmonize.gsc_atlantic",
+        "canco2_storage.metadata.gsc_atlantic",
     ),
     "natcarb_doe": (
         "canco2_storage.harmonize.natcarb_doe",

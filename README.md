@@ -81,6 +81,7 @@ Silver harmonization
         |
         v
 Future national storage database
+```
 
 ## Current dataset workflows
 

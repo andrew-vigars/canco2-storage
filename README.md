@@ -93,6 +93,7 @@ source meanings. They are not blindly concatenated into one flat table.
 
 **Dataset:** *Preliminary assessment of geological carbon-storage potential of Atlantic Canada*  
 **Source:** Geological Survey of Canada Open File 8996, Carey et al. (2023)  
+**Source project:** <https://publications.gc.ca/site/eng/9.927009/publication.html>
 **DOI:** `10.4095/332145`
 
 The workflow acquires and harmonizes 15 regional Chance of Success (COS) shapefiles covering Mesozoic–Cenozoic and Upper Paleozoic storage units.

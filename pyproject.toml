@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "canco2-storage"
-version = "0.1.0"
-description = "Canadian geological CO2 storage data acquisition and harmonization workflows."
+version = "0.2.0a1"
+description = "Reproducible Canadian geological CO2 storage acquisition, harmonization, and unified atlas workflows."
 readme = "README.md"
 requires-python = ">=3.12"
 
@@ -22,6 +22,13 @@ dependencies = [
 test = [
     "pytest>=8",
 ]
+
+[project.scripts]
+canco2-build = "canco2_storage.orchestration.build_all:main"
+canco2-build-geopackages = "canco2_storage.orchestration.geopackages:main"
+canco2-build-unified = "canco2_storage.orchestration.unified:main"
+canco2-run-bronze = "canco2_storage.orchestration.bronze:main"
+canco2-run-silver = "canco2_storage.orchestration.silver:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

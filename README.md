@@ -1,6 +1,6 @@
 # Canadian CO₂ Geological Storage Data Pipeline
 
-`canco2-storage` is a Python package for acquiring, harmonizing, validating, documenting, and publishing heterogeneous Canadian geological CO₂ storage datasets as reproducible Silver-layer products.
+`canco2-storage` is a Python package for acquiring, harmonizing, validating, documenting, and publishing heterogeneous geological CO₂ storage datasets as reproducible Silver-layer products and a unified Canadian storage atlas.
 
 The repository is being developed to support a source-unified national geological storage data foundation for downstream research workflows. The emphasis is on preserving source meaning, provenance, uncertainty, licensing constraints, and spatial integrity rather than forcing unlike datasets into a single interpretation.
 
@@ -18,7 +18,7 @@ Canadian geological CO₂ storage information is distributed across government s
 - update frequency and temporal coverage;
 - licensing and attribution requirements.
 
-This repository provides a reproducible workflow for converting those heterogeneous inputs into standardized, queryable Silver products while preserving the original Bronze sources and documenting the transformations between them.
+This repository provides a reproducible workflow for converting those heterogeneous inputs into standardized, queryable Silver products and a canonical unified GeoPackage while preserving the original Bronze sources and documenting the transformations between them.
 
 ## Repository scope
 
@@ -34,7 +34,8 @@ This repository is responsible for:
 - generating dataset-level metadata, QA outputs, schema inventories, and field dictionaries;
 - producing portable GeoPackage-based Silver datasets;
 - generating human-readable dataset README files;
-- supporting future integration into a national geological storage database.
+- combining the completed Silver packages into a unified Canadian geological storage GeoPackage;
+- retaining source lineage, metadata, and QA in the unified product.
 
 This repository is **not** responsible for:
 
@@ -80,12 +81,15 @@ Silver harmonization
 - generated dataset README documentation
         |
         v
-Future national storage database
+Unified Canadian geological storage atlas
+- canonical storage-unit, feature, and assessment tables
+- administrative tenure features kept separate
+- source lineage, metadata, and QA retained
 ```
 
 ## Current dataset workflows
 
-Four independent end-to-end public-data workflows are currently implemented.
+Four independent end-to-end public-data workflows are implemented.
 They share processing conventions but retain different feature grains and
 source meanings. They are not blindly concatenated into one flat table.
 
@@ -93,6 +97,7 @@ source meanings. They are not blindly concatenated into one flat table.
 
 **Dataset:** *Preliminary assessment of geological carbon-storage potential of Atlantic Canada*  
 **Source:** Geological Survey of Canada Open File 8996, Carey et al. (2023)  
+**Source project:** <https://publications.gc.ca/site/eng/9.927009/publication.html>
 **DOI:** `10.4095/332145`
 
 The workflow acquires and harmonizes 15 regional Chance of Success (COS) shapefiles covering Mesozoic–Cenozoic and Upper Paleozoic storage units.
@@ -170,6 +175,28 @@ aggregation. NATCARB storage-resource estimates are regional screening values,
 not demonstrated injectivity, permitted injection capacity, or project-ready
 capacity.
 
+### Unified Canadian geological storage atlas
+
+The completed unified build consumes the four dated Silver GeoPackages and
+produces a canonical GeoPackage under `data/processed/unified_storage/`.
+NATCARB saline and coal grid cells are subset to Canadian provinces and
+territories using the Statistics Canada digital boundaries acquired by the
+Bronze workflow.
+
+The unified GeoPackage contains four canonical tables:
+
+```text
+storage_units             logical geological storage units
+storage_features          spatial representations of storage units
+storage_assessments       capacity, prospectivity, and related assessments
+administrative_features   regulatory and tenure features
+```
+
+It also retains a normalized source catalog, precursor metadata and QA,
+unified metadata, and unified QA tables. A companion README and dated schema,
+metadata, QA-summary, and field-dictionary files are generated from the
+persisted GeoPackage.
+
 ## Package structure
 
 The codebase uses a `src/` package layout:
@@ -181,6 +208,8 @@ canco2-storage/
 ├── notebooks/
 ├── scripts/
 │   ├── build_geopackages.py
+│   ├── build_unified.py
+│   ├── build_all.py
 │   ├── run_bronze.py
 │   └── run_silver.py
 ├── docs/
@@ -219,7 +248,7 @@ The main responsibilities are separated as follows:
 - `metadata/` contains shared CanCO₂Re submission helpers and dataset-specific README generation;
 - `orchestration/` registers and runs the independent Bronze and Silver workflows;
 - `paths.py` provides package-aware repository-root discovery;
-- `notebooks/` contains exploratory analyses used to understand source datasets and inform production harmonizers.
+- `notebooks/` contains exploratory analyses used to understand source datasets and inform production harmonizers. The production unified build is implemented in `harmonize/unified_atlas.py` and orchestrated through `scripts/build_all.py`.
 
 The `schema/`, `validation/`, and `execution/` packages are reserved for continued consolidation of shared national-schema, validation, and orchestration logic.
 
@@ -227,10 +256,11 @@ The `schema/`, `validation/`, and `execution/` packages are reserved for continu
 
 Python 3.12 or newer is required.
 
-From the repository root, install the package and its runtime dependencies in editable mode:
+From the repository root, install the package and its runtime dependencies in editable mode. Include the test extra when developing:
 
 ```bash
 python -m pip install -e .
+python -m pip install -e ".[test]"
 ```
 
 The package currently declares the following core dependencies through `pyproject.toml`:
@@ -242,6 +272,10 @@ The package currently declares the following core dependencies through `pyprojec
 - `pyproj`
 - `pyogrio`
 
+Installation also provides these console commands: `canco2-build`,
+`canco2-build-geopackages`, `canco2-build-unified`, `canco2-run-bronze`, and
+`canco2-run-silver`.
+
 A successful editable installation should make the package importable without modifying `PYTHONPATH`:
 
 ```bash
@@ -250,7 +284,26 @@ python -c "import canco2_storage"
 
 ## Running the workflows
 
-The current source-specific modules can be run directly with Python's module interface.
+The complete workflow is the recommended entry point. Run it from the
+repository root after installing the package:
+
+```bash
+python scripts/build_all.py
+```
+
+This acquires the registered Bronze inputs, builds the four independent Silver
+GeoPackages, builds the unified atlas, and generates its companion README.
+The equivalent installed command is:
+
+```bash
+canco2-build
+```
+
+Use `--skip-bronze` or `--skip-silver` when the corresponding inputs or
+outputs already exist. Use `--datasets` to limit precursor processing; the
+unified build still requires all four Silver source packages.
+
+The individual workflow stages remain available for inspection and reruns.
 
 ### 1. Acquire Bronze data
 
@@ -362,6 +415,18 @@ python scripts/build_geopackages.py --skip-bronze
 python scripts/build_geopackages.py --skip-silver
 ```
 
+Build only the unified atlas from existing dated Silver GeoPackages:
+
+```bash
+python scripts/build_unified.py
+```
+
+Validate an existing unified GeoPackage without rebuilding it:
+
+```bash
+python scripts/build_unified.py --validate-existing path/to/unified.gpkg
+```
+
 ## Output conventions
 
 Processed outputs are written under:
@@ -429,21 +494,20 @@ EPSG:3978 — NAD83 / Canada Atlas Lambert
 
 Source CRSs are retained in provenance fields and source geometries are repaired when necessary before and after reprojection. Bronze source files are never modified in place.
 
-## Combining the Silver products
+## Unified atlas interpretation
 
-The four products are currently independent GeoPackages. They share common
-processing conventions, provenance fields, geometry validation, and EPSG:3978,
-but they represent different feature grains:
+The unified GeoPackage provides a common query surface without pretending that
+all source records have the same meaning. It preserves the distinctions among:
 
-- AER agreements and agreement tracts are regulatory-tenure features;
-- BC pools and aquifers are logical storage units with spatial representations
-        and, for some units, P10/P50/P90 screening estimates;
-- GSC Atlantic features are qualitative COS prospectivity polygons.
+- geological storage capacity and screening resource estimates;
+- qualitative geological prospectivity and Chance of Success;
+- regulatory and tenure evidence; and
+- source-specific feature representations and logical storage units.
 
-Any future national consolidation should preserve these distinctions. A
-canonical sparse feature layer or query view may expose shared fields, while
-capacity estimates, COS assessments, and tenure attributes should remain
-semantically distinct and nullable where a source does not provide them.
+Source identifiers remain valid within their documented source dataset and
+layer. The unified product does not infer injectivity, deduplicate overlapping
+resources, convert prospectivity into capacity, or treat tenure polygons as
+geological storage objects.
 
 ## Data classification philosophy
 
@@ -477,18 +541,16 @@ Provider-specific warnings can therefore be retained as provenance even when the
 
 ## Development status
 
-The package is currently versioned as `0.1.0` and should be considered an active research codebase rather than a finished national storage atlas.
+The repository is at the `0.2.0a1` core-alpha milestone. The complete
+Bronze-to-Silver-to-unified workflow is implemented, including persisted
+metadata, QA, source lineage, and generated documentation. The products are
+ready for research use and review; they are not a claim that the underlying
+source estimates are project-ready storage capacity or demonstrated
+injectivity.
 
-The immediate architecture separates source acquisition, harmonization, and metadata generation so that additional provincial, federal, academic, or licensed datasets can be added without rewriting the full pipeline.
-
-Future development is expected to focus on:
-
-- formalizing shared national storage schemas;
-- adding additional geological storage datasets;
-- distinguishing capacity, injectivity, prospectivity, tenure, and uncertainty representations;
-- improving common validation and orchestration utilities;
-- linking spatially overlapping representations of the same geological storage system without discarding source provenance;
-- producing source-unified national Silver products suitable for downstream model ingestion.
+Future work can add source datasets, improve cross-source identity and
+validation, and define downstream optimizer policies without changing the
+source-faithful products delivered by this core workflow.
 
 ## Research use
 

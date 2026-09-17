@@ -2,7 +2,8 @@
 
 **Schema contract:** `1.0.0`  
 **Status:** implemented Silver interface  
-**Scope:** dated GeoPackage artifacts produced by the harmonizers
+**Scope:** dated Silver GeoPackage artifacts produced by the source harmonizers
+and dated unified GeoPackage artifacts produced by the unified harmonizer
 
 This document defines the implemented Silver GeoPackage contract. The
 sidecar field dictionaries and source-schema inventories are the authoritative
@@ -95,15 +96,16 @@ version used to combine them. A future optimizer schema may choose hard tenure
 admissibility and soft geological scoring, for example, but that choice is not
 part of Silver `1.0.0`.
 
-### Cross-source identity is deferred
+### Cross-source identity boundary
 
-Silver `1.0.0` does not define a conformed `basin_or_system_id`. Source-faithful
-identifiers such as `storage_unit_id`, `source_link_code`, `natcarb_id`, and
-provider resource names remain valid only within their documented source
-dataset and layer grain. They must not be treated as a cross-border or
-cross-provider join key. A future unified layer must define and version its
-cross-source identity and evidence rules before claiming that BC, Alberta,
-Saskatchewan, or NATCARB records describe the same geological system.
+Silver `1.0.0` and the current unified atlas do not define a conformed
+`basin_or_system_id`. Source-faithful identifiers such as `storage_unit_id`,
+`source_link_code`, `natcarb_id`, and provider resource names remain valid only
+within their documented source dataset and layer grain. They must not be
+treated as a cross-border or cross-provider join key. A future schema revision
+must define and version its cross-source identity and evidence rules before
+claiming that BC, Alberta, Saskatchewan, or NATCARB records describe the same
+geological system.
 
 Until that layer exists, national aggregation must assume that apparent
 geographic overlap across source packages is unresolved and must not infer
@@ -198,10 +200,35 @@ rows. Provider `ASSESSED`, `OVERLAP`, `DUPLICATE`, and P50-method semantics are
 preserved. The harmonizer does not remove duplicates, aggregate overlaps, or
 infer relationships between representations.
 
+### `canada_geological_storage_unified`
+
+The unified GeoPackage combines the four dated Silver packages into a
+canonical query surface while preserving source dataset and layer provenance.
+It contains:
+
+| Name | Type | Grain or role |
+| --- | --- | --- |
+| `storage_units` | `attributes` | One logical geological storage unit |
+| `storage_features` | `features` | One spatial representation of a storage unit |
+| `storage_assessments` | `attributes` | One capacity, prospectivity, or related assessment record |
+| `administrative_features` | `features` | One regulatory or tenure feature |
+
+The unified package also retains a normalized source catalog, complete
+precursor metadata and QA lineage, unified metadata, and unified QA tables.
+The exact registered table names are recorded in the generated source-schema
+inventory and field dictionary. All unified feature layers use EPSG:3978.
+
+NATCARB saline and coal grid cells are spatially subset to Canadian provinces
+and territories using the Statistics Canada boundary support dataset. This
+subset is a processing operation, not a claim that the source resource
+estimates are demonstrated injectivity or project-ready capacity.
+
 ## Sidecar artifacts
 
-Each dataset writes dated artifacts under `data/processed/<dataset_id>/` using
-the pattern `YYYYMMDD_13_DataType_AV`. Depending on the workflow, these include:
+Each source dataset writes dated artifacts under
+`data/processed/<dataset_id>/`, while the unified package writes under
+`data/processed/unified_storage/`. Both use the pattern
+`YYYYMMDD_13_DataType_AV`. Depending on the workflow, these include:
 
 - a Silver GeoPackage;
 - a source-schema inventory;
@@ -236,8 +263,11 @@ explicitly defines additive values at that grain.
 
 ## Querying guidance
 
-Use the logical-unit tables for BC capacity summaries. Use `storage_units` for
-GSC prospectivity analysis. Use AER agreement or tract layers for tenure
-analysis. For NATCARB, select a representation explicitly and inspect provider
-flags before aggregation. A national view should preserve these distinctions
-and should not coerce absent capacity or injectivity values into zero.
+Use the logical-unit tables for BC capacity summaries. Use the unified
+`storage_units` and `storage_assessments` tables for cross-source analysis while
+retaining `source_dataset` and `source_layer`. Use source Silver `storage_units`
+for GSC prospectivity analysis, AER agreement or tract layers for tenure
+analysis, and select a NATCARB representation explicitly while inspecting
+provider flags before aggregation. The unified view preserves these
+distinctions and must not coerce absent capacity or injectivity values into
+zero.

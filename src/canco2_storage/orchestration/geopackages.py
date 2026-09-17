@@ -28,6 +28,33 @@ PIPELINE_DATASETS = tuple(
     if dataset_id in SILVER_WORKFLOWS
 )
 
+BRONZE_DATASETS = tuple(ACQUISITION_MODULES)
+
+
+def resolve_build_datasets(
+    requested: Sequence[str] | None = None,
+) -> list[str]:
+    """Resolve datasets that can be acquired by the complete build."""
+
+    if not requested:
+        return list(BRONZE_DATASETS)
+
+    unknown = sorted(set(requested) - set(BRONZE_DATASETS))
+
+    if unknown:
+        raise ValueError(
+            "Unknown build dataset ID(s): "
+            f"{unknown}. Available datasets: {list(BRONZE_DATASETS)}"
+        )
+
+    requested_set = set(requested)
+
+    return [
+        dataset_id
+        for dataset_id in BRONZE_DATASETS
+        if dataset_id in requested_set
+    ]
+
 
 def resolve_pipeline_datasets(
     requested: Sequence[str] | None = None,
@@ -102,11 +129,16 @@ def build_geopackages(
             "Pipeline must execute at least one layer."
         )
 
-    selected = resolve_pipeline_datasets(datasets)
+    selected_bronze = resolve_build_datasets(datasets)
+    selected_silver = [
+        dataset_id
+        for dataset_id in selected_bronze
+        if dataset_id in SILVER_WORKFLOWS
+    ]
 
     print("CANCO2-Storage GeoPackage build")
     print("-----------------------")
-    print(f"Datasets: {', '.join(selected)}")
+    print(f"Datasets: {', '.join(selected_bronze)}")
     print(
         "Layers:   "
         + " → ".join(
@@ -120,10 +152,10 @@ def build_geopackages(
     )
 
     if run_bronze_layer:
-        run_bronze(selected)
+        run_bronze(selected_bronze)
 
-    if run_silver_layer:
-        run_silver(selected)
+    if run_silver_layer and selected_silver:
+        run_silver(selected_silver)
 
     print("\nCANCO2-Storage GeoPackage build complete.")
     print("---------------------------------")
@@ -142,7 +174,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--datasets",
         nargs="+",
-        choices=PIPELINE_DATASETS,
+        choices=BRONZE_DATASETS,
         help=(
             "Dataset IDs to process. Omit to run every dataset registered in "
             "both Bronze and Silver orchestration layers."

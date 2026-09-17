@@ -1001,6 +1001,10 @@ def build_pool_units(
         + pools["source_link_code"]
     )
     pools["storage_unit_type"] = "depleted_or_near_depleted_pool"
+
+    # Populated later from Appendix E pool-feature consensus.
+    pools["formation"] = None
+
     pools["source_dataset"] = DATASET_ID
     pools["assessment_type"] = ASSESSMENT_TYPE
     pools["data_class"] = DATA_CLASS

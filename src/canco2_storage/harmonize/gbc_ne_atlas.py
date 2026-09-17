@@ -1660,16 +1660,18 @@ def build_aquifer_features(
                     source.get(
                         "NAME",
                         pd.Series(
-                            pd.NA,
+                            None,
                             index=source.index,
+                            dtype="object",
                         ),
                     ),
                 "source_rec_id":
                     source.get(
                         "REC_ID",
                         pd.Series(
-                            pd.NA,
+                            None,
                             index=source.index,
+                            dtype="object",
                         ),
                     ),
                 "source_theoretical_storage_mt":

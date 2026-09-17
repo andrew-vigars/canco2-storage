@@ -30,6 +30,14 @@ BUILD_VARIANT = "v2"
 METADATA_TABLE = f"metadata_{DATASET_ID}"
 QA_TABLE = f"qa_{DATASET_ID}"
 SOURCE_CATALOG_TABLE = f"source_catalog_{DATASET_ID}"
+SOURCE_METADATA_TABLE = f"source_metadata_{DATASET_ID}"
+SOURCE_QA_TABLE = f"source_qa_{DATASET_ID}"
+COMPANION_SUFFIXES = {
+    "source_schema": "SourceSchema_AV.csv",
+    "source_metadata": "SourceMetadata_AV.csv",
+    "qa_summary": "QASummary_AV.csv",
+    "field_dictionary": "FieldDictionary_AV.csv",
+}
 
 PROJECT_ROOT = find_project_root()
 PROCESSED_UNIFIED = PROJECT_ROOT / "data" / "processed" / "unified_storage"
@@ -39,6 +47,11 @@ EXPECTED_GPKG_CONTENTS = {
     "storage_features": "features",
     "storage_assessments": "attributes",
     "administrative_features": "features",
+    SOURCE_CATALOG_TABLE: "attributes",
+    SOURCE_METADATA_TABLE: "attributes",
+    SOURCE_QA_TABLE: "attributes",
+    METADATA_TABLE: "attributes",
+    QA_TABLE: "attributes",
 }
 
 PROCESSING_STEPS = (
@@ -81,6 +94,188 @@ def read_registered_contents(gpkg_path: Path) -> pd.DataFrame:
             """,
             conn,
         )
+
+
+def companion_paths(gpkg_path: Path) -> dict[str, Path]:
+    """Return the four documented CSV companion paths for a GeoPackage."""
+
+    gpkg_path = Path(gpkg_path)
+    return {
+        role: gpkg_path.with_name(gpkg_path.stem + suffix)
+        for role, suffix in COMPANION_SUFFIXES.items()
+    }
+
+
+def _read_table(gpkg_path: Path, table_name: str) -> pd.DataFrame:
+    """Read one SQLite table from the unified GeoPackage."""
+
+    with sqlite3.connect(gpkg_path) as conn:
+        return pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
+
+
+def build_companion_tables(gpkg_path: Path) -> dict[str, pd.DataFrame]:
+    """Build the documented CSV companion tables from a unified GeoPackage."""
+
+    gpkg_path = Path(gpkg_path)
+    contents = read_registered_contents(gpkg_path)
+    registered = contents.set_index("table_name").to_dict("index")
+
+    with sqlite3.connect(gpkg_path) as conn:
+        table_names = [
+            row[0]
+            for row in conn.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table'
+                  AND name NOT LIKE 'gpkg_%'
+                  AND name NOT LIKE 'rtree_%'
+                  AND name NOT LIKE 'sqlite_%'
+                ORDER BY name
+                """
+            )
+        ]
+
+        schema_rows: list[dict[str, object]] = []
+        field_rows: list[dict[str, object]] = []
+        for table_name in table_names:
+            columns = conn.execute(
+                f'PRAGMA table_info("{table_name}")'
+            ).fetchall()
+            table_info = registered.get(table_name, {})
+            schema_rows.append(
+                {
+                    "table_name": table_name,
+                    "data_type": table_info.get("data_type", "attributes"),
+                    "identifier": table_info.get("identifier", table_name),
+                    "description": table_info.get("description", ""),
+                    "column_count": len(columns),
+                    "columns": ", ".join(column[1] for column in columns),
+                }
+            )
+            for _, field, data_type, not_null, _, primary_key in columns:
+                if field == "fid":
+                    continue
+                field_rows.append(
+                    {
+                        "table_name": table_name,
+                        "field": field,
+                        "data_type": data_type or "",
+                        "nullable": not not_null,
+                        "primary_key": bool(primary_key),
+                        "definition": _field_definition(field),
+                        "units": _field_units(field),
+                        "origin": _field_origin(field),
+                        "notes": _field_notes(field),
+                    }
+                )
+
+    source_metadata = _read_table(gpkg_path, SOURCE_METADATA_TABLE)
+    unified_metadata = _read_table(gpkg_path, METADATA_TABLE).assign(
+        source_key="unified",
+        dataset_id=DATASET_ID,
+        source_table=METADATA_TABLE,
+    )
+    source_metadata = pd.concat(
+        [source_metadata, unified_metadata[source_metadata.columns]],
+        ignore_index=True,
+    )
+
+    source_qa = _read_table(gpkg_path, SOURCE_QA_TABLE)
+    unified_qa = _read_table(gpkg_path, QA_TABLE).assign(
+        source_key="unified",
+        dataset_id=DATASET_ID,
+        source_table=QA_TABLE,
+    )
+    source_qa = pd.concat(
+        [source_qa, unified_qa[source_qa.columns]],
+        ignore_index=True,
+    )
+
+    return {
+        "source_schema": pd.DataFrame(schema_rows),
+        "source_metadata": source_metadata.sort_values(
+            ["source_key", "dataset_id", "key"]
+        ).reset_index(drop=True),
+        "qa_summary": source_qa.sort_values(
+            ["source_key", "dataset_id", "check"]
+        ).reset_index(drop=True),
+        "field_dictionary": pd.DataFrame(field_rows),
+    }
+
+
+def _field_definition(field: str) -> str:
+    definitions = {
+        "storage_unit_id": "Stable identifier for one logical storage unit.",
+        "storage_feature_id": "Stable identifier for one spatial representation.",
+        "storage_assessment_id": "Stable identifier for one assessment record.",
+        "source_dataset": "Identifier for the contributing source dataset.",
+        "source_layer": "Source layer or representation name.",
+        "source_unit_id": "Source identifier for the logical storage unit.",
+        "source_feature_id": "Source identifier for the spatial feature.",
+        "assessment_type": "Type of assessment represented by the record.",
+        "data_class": "Semantic role of the record in the unified product.",
+        "capacity_data": "Whether quantitative source capacity data are present.",
+        "injectivity_status": "Source-dependent injectivity information status.",
+        "geometry_area_m2": "Area of the persisted geometry.",
+        "geometry_area_ha": "Area of the persisted geometry.",
+        "geometry_perimeter_m": "Perimeter of the persisted geometry.",
+        "geom": "Persisted GeoPackage geometry.",
+    }
+    return definitions.get(field, "Persisted field in the unified canonical schema.")
+
+
+def _field_units(field: str) -> str:
+    units = {
+        "geometry_area_m2": "m2",
+        "geometry_area_ha": "ha",
+        "geometry_perimeter_m": "m",
+        "storage_p10_tonnes": "tonnes",
+        "storage_p50_tonnes": "tonnes",
+        "storage_p90_tonnes": "tonnes",
+        "theoretical_storage_tonnes": "tonnes",
+        "effective_storage_tonnes": "tonnes",
+        "depth_m": "m",
+        "thickness_m": "m",
+        "pressure_mpa": "MPa",
+        "temperature_c": "degC",
+        "porosity_fraction": "fraction",
+        "permeability_md": "mD",
+        "salinity_tds_ppm": "ppm",
+        "reservoir_cos": "fraction",
+        "seal_cos": "fraction",
+        "trap_cos": "fraction",
+        "total_cos": "fraction",
+    }
+    return units.get(field, "")
+
+
+def _field_origin(field: str) -> str:
+    if field.startswith("source_") or field in {"storage_unit_id", "storage_feature_id", "storage_assessment_id"}:
+        return "provenance"
+    if field in {"assessment_type", "data_class", "capacity_data", "injectivity_status"}:
+        return "harmonized"
+    return "source-dependent"
+
+
+def _field_notes(field: str) -> str:
+    if field in {"storage_p10_tonnes", "storage_p50_tonnes", "storage_p90_tonnes"}:
+        return "Null means the source did not provide that estimate; null is not zero."
+    if field in {"reservoir_cos", "seal_cos", "trap_cos", "total_cos"}:
+        return "Chance-of-success measure where supplied; not storage capacity."
+    if field == "capacity_data":
+        return "False does not permit capacity to be inferred."
+    return ""
+
+
+def export_companion_files(gpkg_path: Path) -> dict[str, Path]:
+    """Write the four documented CSV companions beside a unified GeoPackage."""
+
+    tables = build_companion_tables(gpkg_path)
+    paths = companion_paths(gpkg_path)
+    for role, frame in tables.items():
+        frame.to_csv(paths[role], index=False)
+    return paths
 
 
 def validate_registered_contents(gpkg_path: Path) -> pd.DataFrame:
@@ -230,7 +425,8 @@ def build_readme(gpkg_path: Path) -> str:
     )
     registered_contents = markdown_list(
         [
-            f"`{row.table_name}` - {row.description or row.identifier or 'registered GeoPackage table'}."
+            f"`{row.table_name}` - "
+            f"{(row.description or row.identifier or 'registered GeoPackage table').rstrip('.')}."
             for row in read_registered_contents(gpkg_path).itertuples(index=False)
             if row.table_name in EXPECTED_GPKG_CONTENTS
         ]
@@ -320,6 +516,15 @@ Keywords:
 - `{qa_summary_filename}` - persisted precursor and unified QA export.
 - `{field_dictionary_filename}` - unified canonical field dictionary.
 
+## Researcher quickstart
+
+The repository includes `docs/quickstart.md` and an executable
+`examples/unified_quickstart.py` for opening this GeoPackage, joining
+assessments at the correct grain, filtering NATCARB representations, and
+separating capacity, prospectivity, and tenure. The GeoPackage is the primary
+data artifact; the quickstart does not create a second database or a
+pre-aggregated capacity layer.
+
 ## Use limitations
 
 {metadata['interpretation_note']}
@@ -338,6 +543,7 @@ def generate_readme(gpkg_path: Path, *, output_path: Path | None = None) -> Path
     """Render and write one unified GeoPackage README."""
 
     destination = Path(output_path) if output_path is not None else default_readme_path(gpkg_path)
+    export_companion_files(gpkg_path)
     return write_readme(destination, build_readme(gpkg_path))
 
 

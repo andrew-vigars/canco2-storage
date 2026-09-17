@@ -61,6 +61,9 @@ The unified GeoPackage contains four canonical tables:
 Unified metadata, QA, source catalog, and complete precursor metadata and QA
 lineage are persisted in additional registered attribute tables. The unified
 README and sidecar inventories are generated from the persisted GeoPackage.
+The [researcher quickstart](quickstart.md) is the recommended first-five-minutes
+workflow and reads this GeoPackage directly without creating a second database
+or pre-aggregated capacity artifact.
 
 ## Registered datasets
 
@@ -207,6 +210,12 @@ storage units, spatial representations, and assessments so spatial feature
 counts cannot silently become capacity multipliers. AER regulatory and tenure
 polygons are written to `administrative_features`, separate from geological
 storage objects.
+
+Run the GeoPackage-first researcher example after a unified build:
+
+```bash
+python examples/unified_quickstart.py
+```
 
 ## Reproducibility and interpretation
 

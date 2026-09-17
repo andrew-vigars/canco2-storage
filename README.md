@@ -195,7 +195,20 @@ administrative_features   regulatory and tenure features
 It also retains a normalized source catalog, precursor metadata and QA,
 unified metadata, and unified QA tables. A companion README and dated schema,
 metadata, QA-summary, and field-dictionary files are generated from the
-persisted GeoPackage.
+persisted GeoPackage. The documentation tables are registered as standard
+GeoPackage attribute tables in `gpkg_contents`, making them discoverable in
+GeoPackage-aware GIS clients. No external registration with geopackage.org or
+QGIS is required; a QGIS project is optional for saved styling and map layout.
+
+Researchers can begin with the [GeoPackage researcher quickstart](docs/quickstart.md)
+or run the matching executable example:
+
+```bash
+python examples/unified_quickstart.py
+```
+
+The quickstart uses the GeoPackage directly and does not create a second SQL,
+SQLite, or pre-aggregated capacity artifact.
 
 ## Package structure
 
@@ -213,6 +226,11 @@ canco2-storage/
 │   ├── run_bronze.py
 │   └── run_silver.py
 ├── docs/
+│   ├── quickstart.md
+│   ├── schema.md
+│   └── workflow.md
+├── examples/
+│   └── unified_quickstart.py
 └── src/
     └── canco2_storage/
         ├── acquisition/

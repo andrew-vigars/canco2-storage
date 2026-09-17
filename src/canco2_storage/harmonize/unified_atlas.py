@@ -3236,36 +3236,40 @@ def export_documentation_tables(
     names = documentation_table_names(documentation.unified_metadata)
 
     with closing(sqlite3.connect(output_path)) as conn:
-        documentation.source_catalog.to_sql(
-            names["source_catalog"],
-            conn,
-            if_exists="replace",
-            index=False,
-        )
-        documentation.source_metadata.to_sql(
-            names["source_metadata"],
-            conn,
-            if_exists="replace",
-            index=False,
-        )
-        documentation.source_qa.to_sql(
-            names["source_qa"],
-            conn,
-            if_exists="replace",
-            index=False,
-        )
-        documentation.unified_metadata.to_sql(
-            names["metadata"],
-            conn,
-            if_exists="replace",
-            index=False,
-        )
-        documentation.unified_qa.to_sql(
-            names["qa"],
-            conn,
-            if_exists="replace",
-            index=False,
-        )
+        registerable_tables = {
+            "source_catalog": (
+                documentation.source_catalog,
+                "Normalized one-row-per-precursor source catalog.",
+            ),
+            "source_metadata": (
+                documentation.source_metadata,
+                "Complete precursor metadata lineage in key/value form.",
+            ),
+            "source_qa": (
+                documentation.source_qa,
+                "Complete precursor QA lineage in key/value form.",
+            ),
+            "metadata": (
+                documentation.unified_metadata,
+                "Unified dataset metadata and interpretation notes.",
+            ),
+            "qa": (
+                documentation.unified_qa,
+                "Unified persisted QA checks and results.",
+            ),
+        }
+        for role, (frame, description) in registerable_tables.items():
+            frame.to_sql(
+                names[role],
+                conn,
+                if_exists="replace",
+                index=False,
+            )
+            register_attribute_table(
+                conn,
+                table_name=names[role],
+                description=description,
+            )
         conn.commit()
 
     return names

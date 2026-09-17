@@ -420,15 +420,16 @@ def build_readme(gpkg_path: Path) -> str:
     field_dictionary_filename = f"{companion_stem}FieldDictionary_AV.csv"
 
     source_lines = "\n".join(
-        f"- `{row.dataset_id}` - {row.source_title} ({row.source_organization})."
+        f"- `{str(row.dataset_id)}` - {str(row.source_title)} "
+        f"({str(row.source_organization)})."
         for row in catalog.itertuples(index=False)
     )
     registered_contents = markdown_list(
         [
-            f"`{row.table_name}` - "
-            f"{(row.description or row.identifier or 'registered GeoPackage table').rstrip('.')}."
+            f"`{str(row.table_name)}` - "
+            f"{str(row.description or row.identifier or 'registered GeoPackage table').rstrip('.')}."
             for row in read_registered_contents(gpkg_path).itertuples(index=False)
-            if row.table_name in EXPECTED_GPKG_CONTENTS
+            if str(row.table_name) in EXPECTED_GPKG_CONTENTS
         ]
     )
     classification = "\n\n".join(

@@ -3236,29 +3236,34 @@ def export_documentation_tables(
     names = documentation_table_names(documentation.unified_metadata)
 
     with closing(sqlite3.connect(output_path)) as conn:
-        registerable_tables = {
-            "source_catalog": (
+        registerable_tables: tuple[tuple[str, pd.DataFrame, str], ...] = (
+            (
+                "source_catalog",
                 documentation.source_catalog,
                 "Normalized one-row-per-precursor source catalog.",
             ),
-            "source_metadata": (
+            (
+                "source_metadata",
                 documentation.source_metadata,
                 "Complete precursor metadata lineage in key/value form.",
             ),
-            "source_qa": (
+            (
+                "source_qa",
                 documentation.source_qa,
                 "Complete precursor QA lineage in key/value form.",
             ),
-            "metadata": (
+            (
+                "metadata",
                 documentation.unified_metadata,
                 "Unified dataset metadata and interpretation notes.",
             ),
-            "qa": (
+            (
+                "qa",
                 documentation.unified_qa,
                 "Unified persisted QA checks and results.",
             ),
-        }
-        for role, (frame, description) in registerable_tables.items():
+        )
+        for role, frame, description in registerable_tables:
             frame.to_sql(
                 names[role],
                 conn,
@@ -3447,4 +3452,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

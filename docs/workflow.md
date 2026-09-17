@@ -1,10 +1,10 @@
 # CANCO2-Storage Workflow
 
-This document describes the implemented Bronze and Silver workflow. The
-workflow is dataset-oriented: each source is acquired, harmonized, validated,
-and published as an independent Silver package. The products share processing
-conventions, but they are not concatenated into one table because their feature
-grains and meanings differ.
+This document describes the implemented Bronze, Silver, and unified-atlas
+workflow. Each source is acquired, harmonized, validated, and published as an
+independent Silver package. The completed unified build then maps those
+packages into canonical tables while preserving source lineage and semantic
+distinctions.
 
 ## Layers
 
@@ -41,9 +41,31 @@ Source schema inventories, metadata summaries, QA summaries, field dictionaries,
 and dataset README files are emitted as sidecar files when that dataset
 workflow implements them.
 
+### Unified atlas
+
+The unified build reads the four dated Silver GeoPackages under
+`data/processed/` and writes a dated GeoPackage under
+`data/processed/unified_storage/`. It also reads the Statistics Canada
+province/territory boundary dataset acquired by the Bronze workflow to subset
+NATCARB saline and coal grid cells to Canada.
+
+The unified GeoPackage contains four canonical tables:
+
+| Table | Grain or role |
+| --- | --- |
+| `storage_units` | One logical geological storage unit |
+| `storage_features` | One spatial representation of a storage unit |
+| `storage_assessments` | Capacity, prospectivity, and related assessment records |
+| `administrative_features` | Regulatory and tenure features kept separate from geological storage objects |
+
+Unified metadata, QA, source catalog, and complete precursor metadata and QA
+lineage are persisted in additional registered attribute tables. The unified
+README and sidecar inventories are generated from the persisted GeoPackage.
+
 ## Registered datasets
 
-The four datasets currently registered in both orchestration layers are:
+The four geological datasets currently registered in both orchestration layers
+are:
 
 | ID | Bronze source | Silver classification |
 | --- | --- | --- |
@@ -55,6 +77,9 @@ The four datasets currently registered in both orchestration layers are:
 The orchestration registries define the processing order. Supplying dataset IDs
 in another order does not change that order.
 
+`statcan_digital_boundaries` is registered for Bronze acquisition as a support
+dataset for the unified build. It is not a Silver storage package.
+
 ## Commands
 
 Run commands from the repository root using the active Python 3.12-or-newer
@@ -65,6 +90,16 @@ Install the package in editable mode:
 ```bash
 python -m pip install -e .
 ```
+
+The complete installed workflow is:
+
+```bash
+canco2-build
+```
+
+This runs Bronze acquisition, all four Silver workflows, the unified atlas,
+and unified README generation. The script equivalent is
+`python scripts/build_all.py`.
 
 Acquire all Bronze sources:
 
@@ -95,6 +130,19 @@ Run the complete Bronze-then-Silver pipeline:
 
 ```bash
 python scripts/build_geopackages.py
+```
+
+Build the unified atlas from the completed precursor GeoPackages:
+
+```bash
+python scripts/build_unified.py
+```
+
+Run the complete workflow, including the precursor GeoPackages followed by the
+unified atlas:
+
+```bash
+python scripts/build_all.py
 ```
 
 The top-level builder accepts one or more dataset IDs and can run either layer:
@@ -151,6 +199,15 @@ overlap flags, aggregate overlapping resources, merge grid and polygon
 representations, clip to Canada, or infer missing properties. See
 `schema.md` for the layer contract.
 
+### Unified atlas
+
+The unified harmonizer preserves source-derived identifiers and records the
+precursor dataset and layer for every canonical row. It separates logical
+storage units, spatial representations, and assessments so spatial feature
+counts cannot silently become capacity multipliers. AER regulatory and tenure
+polygons are written to `administrative_features`, separate from geological
+storage objects.
+
 ## Reproducibility and interpretation
 
 Output filenames use the generated-date convention
@@ -167,6 +224,6 @@ dependency versions, and output environment must be pinned for an exact rebuild.
 The current workflow preserves source checksums where acquisition provides
 them, but does not yet enforce byte-level artifact hashes.
 
-The Silver products are screening and source-preservation artifacts. They do
-not assign P10/P50/P90 scenarios across datasets, estimate injectivity, select
-project-ready sites, or optimize transport networks.
+The Silver and unified products are screening and source-preservation
+artifacts. They do not assign P10/P50/P90 scenarios across datasets, estimate
+injectivity, select project-ready sites, or optimize transport networks.

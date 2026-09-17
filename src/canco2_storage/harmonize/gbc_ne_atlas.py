@@ -310,6 +310,7 @@ AQUIFER_FIELD_VARIANTS = {
 POOL_UNIT_COLUMNS = [
     "storage_unit_id",
     "storage_unit_type",
+    "formation",
     "pool_class",
     "pool_name",
     "field_code",
@@ -1037,7 +1038,6 @@ def read_pool_master(
 
     return master, warning_messages, master_path
 
-
 def build_pool_features(
     shapefiles: list[Path],
     pool_units: pd.DataFrame,
@@ -1276,6 +1276,48 @@ def build_pool_features(
 
     return final, qa
 
+
+
+def propagate_pool_formations(
+    pool_units: pd.DataFrame,
+    pool_features: gpd.GeoDataFrame,
+) -> pd.DataFrame:
+    """Propagate consensus Appendix E formation names to logical pool units."""
+
+    def consensus_formation(values: pd.Series) -> str | None:
+        """Return one formation when all populated feature values agree."""
+
+        cleaned = (
+            values.dropna()
+            .astype("string")
+            .str.strip()
+        )
+
+        unique_values = (
+            cleaned.loc[cleaned.ne("")]
+            .unique()
+            .tolist()
+        )
+
+        if len(unique_values) == 1:
+            return str(unique_values[0])
+
+        return None
+
+    formation_lookup = (
+        pool_features
+        .groupby("storage_unit_id")["source_formation_name"]
+        .agg(consensus_formation)
+    )
+
+    output = pool_units.copy()
+
+    output["formation"] = (
+        output["storage_unit_id"]
+        .map(formation_lookup)
+    )
+
+    return output
 
 # =============================================================================
 # Aquifer harmonization
@@ -2229,6 +2271,14 @@ COMMON_DICTIONARY = {
 
 POOL_UNIT_DICTIONARY = {
     **COMMON_DICTIONARY,
+    "formation": (
+        "Formation name propagated from Appendix E pool features when all "
+        "non-null source formation names associated with the logical pool agree.",
+        "text",
+        "Appendix E",
+        "Null when no formation is reported or when associated pool features "
+        "contain conflicting formation names.",
+    ),
     "pool_class": (
         "Appendix C screening class assigned to the pool.",
         "text",
@@ -2821,6 +2871,28 @@ def export_outputs(
         target_crs=TARGET_CRS,
     )
 
+    final_aquifer_features = validate_written_spatial_layer(
+    gpkg_path=SILVER_GPKG_PATH,
+    layer_name="aquifer_features",
+    expected=aquifer_features,
+    unique_id_field="storage_feature_id",
+    target_crs=TARGET_CRS,
+)
+
+    for column in ["source_name", "source_rec_id"]:
+        if column in final_aquifer_features.columns:
+            literal_na = (
+                final_aquifer_features[column]
+                .eq("<NA>")
+                .fillna(False)
+            )
+
+            if literal_na.any():
+                raise ValueError(
+                    f"Persisted aquifer_features.{column} contains "
+                    f"{int(literal_na.sum()):,} literal '<NA>' value(s)."
+                )
+
     validate_registered_tables(
         gpkg_path=SILVER_GPKG_PATH,
         expected=EXPECTED_GPKG_CONTENTS,
@@ -2976,6 +3048,11 @@ def run_harmonization(
     pool_features, pool_qa = build_pool_features(
         shapefiles,
         pool_units,
+    )
+
+    pool_units = propagate_pool_formations(
+        pool_units,
+        pool_features,
     )
 
     aquifer_paths = find_aquifer_layers(

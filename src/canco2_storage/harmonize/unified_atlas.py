@@ -1453,6 +1453,12 @@ def build_atlantic_storage_features(atlantic_path: Path) -> gpd.GeoDataFrame:
     source["storage_subtype"] = pd.NA
     source["representation"] = "prospectivity_polygon"
     source["country"] = "Canada"
+    # Older Atlantic Silver packages predate the standard geometry-measure
+    # fields. Calculate them from the canonical projected geometry so unified
+    # builds remain complete when consuming those packages.
+    source["geometry_area_m2"] = source.geometry.area
+    source["geometry_area_ha"] = source["geometry_area_m2"] / 10_000.0
+    source["geometry_perimeter_m"] = source.geometry.length
     combined = conform_storage_features(source)
     validate_primary_key(combined, "storage_feature_id", "Atlantic storage_features")
     return combined
@@ -1725,6 +1731,24 @@ def validate_canonical_tables(tables: UnifiedTables) -> None:
             raise ValueError(f"{name} contains empty geometry.")
         if (~gdf.geometry.is_valid).any():
             raise ValueError(f"{name} contains invalid geometry.")
+
+    expected_geometry_measures = {
+        "geometry_area_m2": tables.storage_features.geometry.area,
+        "geometry_area_ha": tables.storage_features.geometry.area / 10_000.0,
+        "geometry_perimeter_m": tables.storage_features.geometry.length,
+    }
+    for column, expected in expected_geometry_measures.items():
+        values = pd.to_numeric(tables.storage_features[column], errors="coerce")
+        if values.isna().any():
+            raise ValueError(f"storage_features contains missing {column} values.")
+        if (values <= 0).any():
+            raise ValueError(f"storage_features contains non-positive {column} values.")
+        tolerance = expected.abs() * 1e-9 + 1e-6
+        if ((values - expected).abs() > tolerance).any():
+            raise ValueError(
+                f"storage_features contains {column} values inconsistent with "
+                f"its {WORKING_CRS} geometry."
+            )
 
     incorrectly_typed = [
         column

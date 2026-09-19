@@ -215,8 +215,16 @@ It contains:
 
 The unified package also retains a normalized source catalog, complete
 precursor metadata and QA lineage, unified metadata, and unified QA tables.
-The exact registered table names are recorded in the generated source-schema
-inventory and field dictionary. All unified feature layers use EPSG:3978.
+These documentation tables are registered as standard GeoPackage `attributes`
+in `gpkg_contents`, so GeoPackage-aware clients can discover them alongside the
+spatial layers. The exact registered table names are recorded in the generated
+source-schema inventory and field dictionary. All unified feature layers use
+EPSG:3978.
+
+No external registration with geopackage.org is required. A QGIS project file
+is also not required for table discoverability; QGIS can open the registered
+attribute tables directly. A QGIS project may be added separately when the
+release needs saved layer styling, labels, joins, or a curated map layout.
 
 NATCARB saline and coal grid cells are spatially subset to Canadian provinces
 and territories using the Statistics Canada boundary support dataset. This
@@ -262,6 +270,10 @@ feature count must never be used as a capacity multiplier unless a source
 explicitly defines additive values at that grain.
 
 ## Querying guidance
+
+For a first analysis, start with the
+[researcher quickstart](quickstart.md), which reads the unified GeoPackage
+directly and demonstrates the grain-safe assessment joins.
 
 Use the logical-unit tables for BC capacity summaries. Use the unified
 `storage_units` and `storage_assessments` tables for cross-source analysis while

@@ -43,10 +43,10 @@ from canco2_storage.metadata.common import (
 
 from canco2_storage.harmonize.common import (
     SILVER_CRS,
+    project_and_measure,
     read_source_layer,
     repair_geometries,
     validate_registered_tables,
-    validate_target_crs,
     write_registered_attribute_table,
 )
 
@@ -553,6 +553,9 @@ SILVER_COLUMNS = [
     "source_url",
     "licence_name",
     "licence_url",
+    "geometry_area_m2",
+    "geometry_area_ha",
+    "geometry_perimeter_m",
     "geometry",
 ]
 
@@ -644,17 +647,13 @@ def harmonize_layer(
         crs=source.crs,
     )
 
-    silver = silver[SILVER_COLUMNS].to_crs(TARGET_CRS)
-    validate_target_crs(
+    # Reproject, repair any topology issues exposed by reprojection, and add the
+    # standard Silver geometry measurements in the projected CRS.
+    silver, invalid_projected_before, invalid_projected_after = project_and_measure(
         silver,
         target_crs=TARGET_CRS,
     )
-
-    # Reprojection itself can expose or create topology issues. Repair again in
-    # the canonical Silver CRS so the in-memory artifact is valid before export.
-    silver, invalid_projected_before, invalid_projected_after = (
-        repair_geometries(silver)
-    )
+    silver = silver[SILVER_COLUMNS]
 
     if silver["feature_id"].duplicated().any():
         raise ValueError(

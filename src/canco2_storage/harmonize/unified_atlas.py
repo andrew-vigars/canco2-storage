@@ -1453,6 +1453,12 @@ def build_atlantic_storage_features(atlantic_path: Path) -> gpd.GeoDataFrame:
     source["storage_subtype"] = pd.NA
     source["representation"] = "prospectivity_polygon"
     source["country"] = "Canada"
+    # Older Atlantic Silver packages predate the standard geometry-measure
+    # fields. Calculate them from the canonical projected geometry so unified
+    # builds remain complete when consuming those packages.
+    source["geometry_area_m2"] = source.geometry.area
+    source["geometry_area_ha"] = source["geometry_area_m2"] / 10_000.0
+    source["geometry_perimeter_m"] = source.geometry.length
     combined = conform_storage_features(source)
     validate_primary_key(combined, "storage_feature_id", "Atlantic storage_features")
     return combined
@@ -1725,6 +1731,24 @@ def validate_canonical_tables(tables: UnifiedTables) -> None:
             raise ValueError(f"{name} contains empty geometry.")
         if (~gdf.geometry.is_valid).any():
             raise ValueError(f"{name} contains invalid geometry.")
+
+    expected_geometry_measures = {
+        "geometry_area_m2": tables.storage_features.geometry.area,
+        "geometry_area_ha": tables.storage_features.geometry.area / 10_000.0,
+        "geometry_perimeter_m": tables.storage_features.geometry.length,
+    }
+    for column, expected in expected_geometry_measures.items():
+        values = pd.to_numeric(tables.storage_features[column], errors="coerce")
+        if values.isna().any():
+            raise ValueError(f"storage_features contains missing {column} values.")
+        if (values <= 0).any():
+            raise ValueError(f"storage_features contains non-positive {column} values.")
+        tolerance = expected.abs() * 1e-9 + 1e-6
+        if ((values - expected).abs() > tolerance).any():
+            raise ValueError(
+                f"storage_features contains {column} values inconsistent with "
+                f"its {WORKING_CRS} geometry."
+            )
 
     incorrectly_typed = [
         column
@@ -3236,36 +3260,45 @@ def export_documentation_tables(
     names = documentation_table_names(documentation.unified_metadata)
 
     with closing(sqlite3.connect(output_path)) as conn:
-        documentation.source_catalog.to_sql(
-            names["source_catalog"],
-            conn,
-            if_exists="replace",
-            index=False,
+        registerable_tables: tuple[tuple[str, pd.DataFrame, str], ...] = (
+            (
+                "source_catalog",
+                documentation.source_catalog,
+                "Normalized one-row-per-precursor source catalog.",
+            ),
+            (
+                "source_metadata",
+                documentation.source_metadata,
+                "Complete precursor metadata lineage in key/value form.",
+            ),
+            (
+                "source_qa",
+                documentation.source_qa,
+                "Complete precursor QA lineage in key/value form.",
+            ),
+            (
+                "metadata",
+                documentation.unified_metadata,
+                "Unified dataset metadata and interpretation notes.",
+            ),
+            (
+                "qa",
+                documentation.unified_qa,
+                "Unified persisted QA checks and results.",
+            ),
         )
-        documentation.source_metadata.to_sql(
-            names["source_metadata"],
-            conn,
-            if_exists="replace",
-            index=False,
-        )
-        documentation.source_qa.to_sql(
-            names["source_qa"],
-            conn,
-            if_exists="replace",
-            index=False,
-        )
-        documentation.unified_metadata.to_sql(
-            names["metadata"],
-            conn,
-            if_exists="replace",
-            index=False,
-        )
-        documentation.unified_qa.to_sql(
-            names["qa"],
-            conn,
-            if_exists="replace",
-            index=False,
-        )
+        for role, frame, description in registerable_tables:
+            frame.to_sql(
+                names[role],
+                conn,
+                if_exists="replace",
+                index=False,
+            )
+            register_attribute_table(
+                conn,
+                table_name=names[role],
+                description=description,
+            )
         conn.commit()
 
     return names
@@ -3443,4 +3476,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

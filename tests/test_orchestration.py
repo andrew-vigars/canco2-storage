@@ -1,5 +1,8 @@
 """Tests for dataset workflow registration and resolution."""
 
+from pathlib import Path
+import sqlite3
+
 import pytest
 
 from canco2_storage.orchestration import build_all, unified
@@ -10,6 +13,7 @@ from canco2_storage.orchestration.geopackages import (
     resolve_pipeline_datasets,
 )
 from canco2_storage.orchestration.silver import resolve_datasets
+from canco2_storage.metadata.unified_atlas import companion_paths
 
 
 def test_all_registered_datasets_are_in_pipeline_order() -> None:
@@ -105,3 +109,42 @@ def test_build_all_runs_geopackages_before_unified(monkeypatch) -> None:
     build_all.main()
 
     assert calls == ["geopackages", "unified"]
+
+
+def test_unified_companion_paths_follow_geopackage_name() -> None:
+    """Name all documented unified CSV companions beside the GeoPackage."""
+
+    paths = companion_paths(
+        Path("20260917_13_CanadaGeologicalStorageUnified_AV_v2.gpkg")
+    )
+
+    assert [path.name for path in paths.values()] == [
+        "20260917_13_CanadaGeologicalStorageUnified_AV_v2SourceSchema_AV.csv",
+        "20260917_13_CanadaGeologicalStorageUnified_AV_v2SourceMetadata_AV.csv",
+        "20260917_13_CanadaGeologicalStorageUnified_AV_v2QASummary_AV.csv",
+        "20260917_13_CanadaGeologicalStorageUnified_AV_v2FieldDictionary_AV.csv",
+    ]
+
+
+def test_unified_documentation_tables_are_registered() -> None:
+    """Require documentation tables to be discoverable through gpkg_contents."""
+
+    package = Path(
+        "data/processed/unified_storage/"
+        "20260917_13_CanadaGeologicalStorageUnified_AV_v2.gpkg"
+    )
+    if not package.is_file():
+        pytest.skip("Published unified GeoPackage is not available.")
+
+    with sqlite3.connect(package) as connection:
+        registered = dict(
+            connection.execute(
+                "SELECT table_name, data_type FROM gpkg_contents"
+            ).fetchall()
+        )
+
+    assert registered["source_catalog_canada_geological_storage_unified"] == "attributes"
+    assert registered["source_metadata_canada_geological_storage_unified"] == "attributes"
+    assert registered["source_qa_canada_geological_storage_unified"] == "attributes"
+    assert registered["metadata_canada_geological_storage_unified"] == "attributes"
+    assert registered["qa_canada_geological_storage_unified"] == "attributes"

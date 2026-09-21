@@ -5,6 +5,12 @@ SQLite database, SQL export, or pre-aggregated capacity layer.
 
 ## Open the package
 
+Run the examples from the repository root after installing the package with
+`python -m pip install -e .`. If no unified GeoPackage exists yet, run
+`canco2-build` for the complete workflow, or `canco2-build-unified` when all four
+Silver packages and the Statistics Canada Bronze boundaries already exist.
+See the [workflow guide](workflow.md) for selective builds and reruns.
+
 Use the most recent file under `data/processed/unified_storage/`:
 
 ```python
@@ -129,6 +135,10 @@ The unified package contains the Canadian NATCARB saline and coal grid-cell
 subset plus Canadian oil-and-gas resource polygons. The saline and coal area
 representations remain in the NATCARB Silver package and are not interchangeable
 with grid cells.
+
+The grid-cell subset includes whole cells intersecting Canada's boundary; cells
+are not clipped and capacity is not prorated by overlap area. Oil/gas polygons
+are selected using source-reported Canadian province/territory codes.
 
 Do not merge grid cells and polygons, count a spatial representation as a
 separate storage unit, or aggregate across provider overlap/duplicate flags

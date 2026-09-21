@@ -50,7 +50,9 @@ Those operations belong to downstream consumer models or research workflows.
 
 ## Data architecture
 
-The current workflow follows a Bronze → Silver pattern.
+The current workflow follows Bronze acquisition → source-specific Silver
+packages → a unified atlas. See the [workflow guide and Mermaid diagram](docs/workflow.md)
+for commands, dependencies, validation, and reruns.
 
 ```text
 Original provider datasets
@@ -238,24 +240,28 @@ canco2-storage/
         │   ├── aer_agreements.py
         │   ├── gbc_ne_atlas.py
         │   ├── gsc_atlantic.py
-        │   └── natcarb_doe.py
+        │   ├── natcarb_doe.py
+        │   └── statcan_digital_boundaries.py
         ├── harmonize/
         │   ├── common.py
         │   ├── aer_agreements.py
         │   ├── gbc_ne_atlas.py
         │   ├── gsc_atlantic.py
-        │   └── natcarb_doe.py
+        │   ├── natcarb_doe.py
+        │   └── unified_atlas.py
         ├── metadata/
         │   ├── common.py
         │   ├── aer_agreements.py
         │   ├── gbc_ne_atlas.py
         │   ├── gsc_atlantic.py
-        │   └── natcarb_doe.py
+        │   ├── natcarb_doe.py
+        │   └── unified_atlas.py
         ├── orchestration/
         │   ├── bronze.py
+        │   ├── build_all.py
         │   ├── geopackages.py
-        │   └── silver.py        
-        ├── schema/
+        │   ├── silver.py
+        │   └── unified.py
         └── paths.py
 ```
 
@@ -268,7 +274,7 @@ The main responsibilities are separated as follows:
 - `paths.py` provides package-aware repository-root discovery;
 - `notebooks/` contains exploratory analyses used to understand source datasets and inform production harmonizers. The production unified build is implemented in `harmonize/unified_atlas.py` and orchestrated through `scripts/build_all.py`.
 
-The `schema/`, `validation/`, and `execution/` packages are reserved for continued consolidation of shared national-schema, validation, and orchestration logic.
+The stable layer and interpretation contract is documented in [docs/schema.md](docs/schema.md).
 
 ## Installation
 
@@ -287,6 +293,7 @@ The package currently declares the following core dependencies through `pyprojec
 - `pandas`
 - `geopandas`
 - `shapely`
+- `openpyxl`
 - `pyproj`
 - `pyogrio`
 
@@ -318,8 +325,10 @@ canco2-build
 ```
 
 Use `--skip-bronze` or `--skip-silver` when the corresponding inputs or
-outputs already exist. Use `--datasets` to limit precursor processing; the
-unified build still requires all four Silver source packages.
+outputs already exist. Both options still run the unified stage; passing both
+together is rejected. Use `--datasets` to limit precursor processing; the
+unified build still requires all four Silver source packages and the Statistics
+Canada boundaries. To rebuild only the unified product, use `canco2-build-unified`.
 
 The individual workflow stages remain available for inspection and reruns.
 
@@ -338,8 +347,17 @@ python scripts/run_bronze.py --dataset aer_agreements
 python scripts/run_bronze.py --dataset gbc_ne_atlas --dataset gsc_atlantic
 ```
 
-The registered acquisition dataset IDs are `aer_agreements`, `gbc_ne_atlas`,
-`gsc_atlantic`, and `natcarb_doe`.
+The registered acquisition dataset IDs are `statcan_digital_boundaries`,
+`aer_agreements`, `gbc_ne_atlas`, `gsc_atlantic`, and `natcarb_doe`. Statistics
+Canada boundaries support the unified stage and do not produce a Silver package.
+
+The installed Bronze and Silver commands use `--datasets` with a space-separated
+list; the `run_bronze.py` and `run_silver.py` scripts use repeatable `--dataset`:
+
+```bash
+canco2-run-bronze --datasets statcan_digital_boundaries gsc_atlantic
+canco2-run-silver --datasets gsc_atlantic natcarb_doe
+```
 
 The underlying modules can also be run directly.
 
@@ -388,7 +406,7 @@ python -m canco2_storage.harmonize.gbc_ne_atlas --inspect-only
 
 ### 3. Build Silver outputs
 
-Run all registered Silver workflows, including dataset README generation where implemented:
+Run all registered Silver workflows, including dataset README generation:
 
 ```bash
 python scripts/run_silver.py
@@ -414,6 +432,11 @@ python -m canco2_storage.harmonize.natcarb_doe
 ```
 
 The harmonizers validate the persisted artifacts after writing them rather than assuming the in-memory GeoDataFrames and serialized GeoPackages are identical.
+
+Direct BC, Atlantic, and NATCARB harmonizer calls require a subsequent call to
+their matching `canco2_storage.metadata.<dataset_id>` module to generate the
+README. The Silver orchestrator runs both steps; AER generates its README
+inside its harmonizer.
 
 ### 4. Build Bronze and Silver GeoPackages together
 
@@ -459,6 +482,11 @@ Submission filenames are generated from shared metadata using the pattern:
 YYYYMMDD_ActivityCode_DataType_CreatorInitials
 ```
 
+The unified GeoPackage adds the build variant suffix `_v2.gpkg`. Rebuilding
+on the same date replaces same-named products; a new date creates a new set.
+Unified builds select the newest canonical filename independently for each
+Silver source, so the selected source dates can differ.
+
 The shared naming and documentation helpers are implemented in:
 
 ```text
@@ -502,6 +530,15 @@ The AER workflow produces one GeoPackage containing:
 
 Separate tract and agreement field dictionaries are also generated.
 
+### NATCARB Silver product
+
+The GeoPackage contains `saline_resource_cells`, `saline_resource_areas`,
+`coal_resource_cells`, `coal_resource_areas`, and `oil_gas_resources`, plus ten
+provider domain tables, `metadata_natcarb_doe`, and `qa_natcarb_doe`. Schema,
+metadata, QA, field-dictionary, and README sidecars accompany the package.
+The Silver package retains the source coverage; Canadian selection happens
+in the unified build.
+
 ## Spatial standard
 
 Silver spatial products use:
@@ -535,7 +572,7 @@ For example:
 
 - `geological_prospectivity` describes qualitative or probabilistic geological suitability;
 - `regulatory_tenure` describes administrative or pore-space agreement boundaries;
-- future capacity-bearing datasets will be represented separately when explicit quantitative storage-resource estimates are available.
+- `geological_storage_capacity` describes quantitative source-reported estimates from the BC atlas and capacity-bearing NATCARB layers.
 
 This avoids collapsing prospectivity, tenure, storage capacity, injectivity, and project feasibility into a single ambiguous "storage" layer.
 

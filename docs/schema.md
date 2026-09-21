@@ -1,11 +1,12 @@
-# CANCO2-Storage Silver Schema
+# CANCO2-Storage Silver and Unified Schema
 
 **Schema contract:** `1.0.0`  
-**Status:** implemented Silver interface  
+**Status:** implemented Silver and unified interfaces
+
 **Scope:** dated Silver GeoPackage artifacts produced by the source harmonizers
 and dated unified GeoPackage artifacts produced by the unified harmonizer
 
-This document defines the implemented Silver GeoPackage contract. The
+This document defines the implemented Silver and unified GeoPackage contract. The
 sidecar field dictionaries and source-schema inventories are the authoritative
 field-level references for each dated output. This page records the stable
 concepts and layer grain that users need when querying multiple products.
@@ -41,8 +42,10 @@ source geometry. They calculate the following measures after reprojection:
 | `geometry_perimeter_m` | Perimeter of the Silver geometry | metres |
 
 Invalid non-null geometries are repaired on a copy of the source data. Bronze
-files are never edited. Null or empty geometries are not accepted in persisted
-Silver feature layers.
+files are never edited. Persisted Silver geometry checks reject null geometries;
+the shared spatial validator also rejects empty geometries. GSC Atlantic uses
+a dataset-specific read-back validator for CRS, feature counts, identifiers,
+null geometries, and validity, with one repair/rewrite attempt when necessary.
 
 ### Classification fields
 
@@ -227,7 +230,10 @@ attribute tables directly. A QGIS project may be added separately when the
 release needs saved layer styling, labels, joins, or a curated map layout.
 
 NATCARB saline and coal grid cells are spatially subset to Canadian provinces
-and territories using the Statistics Canada boundary support dataset. This
+and territories using the Statistics Canada boundary support dataset. Whole
+intersecting cells are retained without clipping geometries or prorating capacity.
+Oil/gas polygons are selected by source-reported Canadian province/territory
+codes. Saline and coal extent polygons remain in Silver only. This
 subset is a processing operation, not a claim that the source resource
 estimates are demonstrated injectivity or project-ready capacity.
 
@@ -243,6 +249,11 @@ Each source dataset writes dated artifacts under
 - source metadata and QA-summary CSV files;
 - one or more field dictionaries; and
 - a generated Markdown README.
+
+The unified GeoPackage adds a build variant suffix and is currently named
+`YYYYMMDD_13_CanadaGeologicalStorageUnified_AV_v2.gpkg`. The `v2` filename suffix
+is distinct from this document's semantic schema contract version. Same-day
+rebuilds replace same-named outputs.
 
 Inspection-only diagnostics, such as workbook inventories, layer inventories,
 pool reconciliation, or capacity QA, are written under the dataset's

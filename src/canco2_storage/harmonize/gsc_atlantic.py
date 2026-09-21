@@ -47,6 +47,7 @@ from canco2_storage.harmonize.common import (
     read_source_layer,
     repair_geometries,
     validate_registered_tables,
+    validate_target_crs,
     write_registered_attribute_table,
 )
 
@@ -1058,9 +1059,9 @@ def validate_written_storage_layer(
             layer="storage_units",
         )
         validate_target_crs(
-        written,
-        target_crs=TARGET_CRS,
-    )
+            written,
+            target_crs=TARGET_CRS,
+        )
 
     invalid_after = int((~written.geometry.is_valid).sum())
 

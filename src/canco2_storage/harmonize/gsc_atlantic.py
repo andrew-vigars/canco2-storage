@@ -47,6 +47,7 @@ from canco2_storage.harmonize.common import (
     read_source_layer,
     repair_geometries,
     validate_registered_tables,
+    validate_target_crs,
     write_registered_attribute_table,
 )
 

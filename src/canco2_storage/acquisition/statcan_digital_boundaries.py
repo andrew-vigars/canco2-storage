@@ -5,7 +5,8 @@ This module performs Bronze-layer acquisition only for the Statistics Canada
 
 The workflow:
 
-- downloads the official Statistics Canada ZIP archive;
+- downloads an archived copy of the official Statistics Canada ZIP from
+  Source Cooperative because the upstream host challenges automated clients;
 - validates that the download is a ZIP file;
 - calculates the archive SHA-256 checksum;
 - extracts the provider files without altering their contents;
@@ -25,6 +26,10 @@ Digital boundary file — provinces and territories.
 Official archive:
 https://www12.statcan.gc.ca/census-recensement/2021/geo/sip-pis/
 boundary-limites/files-fichiers/lpr_000a21a_e.zip
+
+Download mirror:
+https://data.source.coop/dataforcanada/d4c-datapkg-statistical/archive/
+statcan/boundaries/2021/lpr_000a21a_e.zip
 """
 
 from __future__ import annotations
@@ -86,10 +91,17 @@ ARCHIVE_FRONTEND_URL = (
     "boundary-limites/files-fichiers/lpr_000a21a_e.zip"
 )
 
-# Direct binary download used by the acquisition workflow.
-ARCHIVE_URL = (
+# Authoritative upstream resource. Cloudflare currently challenges automated
+# clients, so the acquisition workflow records this URL but downloads the
+# archived copy below.
+ARCHIVE_UPSTREAM_URL = (
     "https://www12.statcan.gc.ca/census-recensement/2021/geo/"
     "sip-pis/boundary-limites/files-fichiers/lpr_000a21a_e.zip"
+)
+
+ARCHIVE_URL = (
+    "https://data.source.coop/dataforcanada/d4c-datapkg-statistical/"
+    "archive/statcan/boundaries/2021/lpr_000a21a_e.zip"
 )
 
 ARCHIVE_NAME = "lpr_000a21a_e.zip"
@@ -327,7 +339,8 @@ def acquire_digital_boundaries(
     print(f"Organization:  {SOURCE_ORGANIZATION}")
     print(f"Source title:  {SOURCE_TITLE}")
     print(f"Source page:   {SOURCE_PAGE_URL}")
-    print(f"Archive URL:   {ARCHIVE_URL}")
+    print(f"Upstream URL: {ARCHIVE_UPSTREAM_URL}")
+    print(f"Download URL: {ARCHIVE_URL}")
     print(f"Raw folder:    {raw_dir}\n")
 
     archive_path = raw_dir / ARCHIVE_NAME

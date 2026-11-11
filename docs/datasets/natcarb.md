@@ -9,23 +9,27 @@ all four daughter packages and the unified product.
 
 ## At a glance
 
-| Property | Description |
+| Item | Value |
 | --- | --- |
-| Source | U.S. Department of Energy (DOE) — National Energy Technology Laboratory (NETL) |
+| Source organization | U.S. Department of Energy — National Energy Technology Laboratory |
 | Source product | NATCARB All Data v1502 |
-| Source date | May 14, 2015 |
+| Geographic scope | United States and parts of Canada |
+| Published date | May 14, 2015 |
+| Data current as of | v1502; a separate observation date is not stated |
+| Update cadence | Static versioned release |
+| Source access | [NATCARB All Data v1502 on NETL EDX](https://edx.netl.doe.gov/dataset/natcarb-alldata-v1502) |
 | Current documentation | [NETL NATCARB interactive experience](https://arcgis.netl.doe.gov/portal/apps/experiencebuilder/experience/?id=ea8e3add7d6844ba8768af930e5e7f2a) |
-| v1502 dataset record | [NATCARB All Data v1502 on NETL EDX](https://edx.netl.doe.gov/dataset/natcarb-alldata-v1502) |
 | General dataset record | [NATCARB on NETL EDX](https://edx.netl.doe.gov/dataset/natcarb) |
 | DOI | [10.18141/1474110](https://doi.org/10.18141/1474110) |
 | Recommended citation | Bauer, J., Rowan, C., Barkhurst, A., Digiulio, J., Jones, K., Sabbatino, M., Rose, K., and Wingo, P. (2018-09-27). *NATCARB*. |
-| Primary source format | Esri File Geodatabase |
-| Source extent | United States and parts of Canada |
-| Daughter output pattern | `YYYYMMDD_13_NATCARBStorage_AV.gpkg` |
+| Primary source content | Esri File Geodatabase, metadata, and coded-value domains |
+| Daughter output | `YYYYMMDD_13_NATCARBStorage_AV.gpkg` |
+| Daughter contents | Five storage-resource layers and ten provider domain tables |
 | Daughter CRS | EPSG:3978 — NAD83 / Canada Atlas Lambert |
 | Unified source key | `source_dataset = 'NATCARB'` |
-| Assessment type | Quantitative geological storage resource |
-| Injectivity | Not quantitatively assessed |
+| Data class | `geological_storage_capacity` |
+| Assessment type | `quantitative_geological_storage_resource` |
+| Capacity / injectivity | Quantitative estimates where reported; injectivity not quantitatively assessed |
 
 NATCARB is intended for regional- to continental-scale screening. Its storage
 resource estimates are not permitted injection capacity, demonstrated

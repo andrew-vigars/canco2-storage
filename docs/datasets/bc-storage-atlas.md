@@ -11,21 +11,26 @@ all four daughter packages and the unified product.
 
 ## At a glance
 
-| Property | Description |
+| Item | Value |
 | --- | --- |
 | Source organization | Geoscience BC |
 | Source product | Northeast BC Geological Carbon Capture and Storage Atlas |
 | Report | Geoscience BC Report 2023-04 |
 | Lead researchers | K. Rakhit and N. Sweet |
 | Research organization | Canadian Discovery Ltd. |
-| Project page | [Geoscience BC project 2022-001](https://www.geosciencebc.com/projects/2022-001/) |
 | Geographic scope | Northeast British Columbia, within the Western Canada Sedimentary Basin |
-| Principal source formats | One Appendix C Excel workbook and 109 Appendix E shapefiles |
-| Daughter output pattern | `YYYYMMDD_13_BCStorageAtlas_AV.gpkg` |
+| Published date | 2023 |
+| Data current as of | Not separately stated in the source metadata |
+| Update cadence | Static report publication |
+| Source access | [Geoscience BC project 2022-001](https://www.geosciencebc.com/projects/2022-001/) |
+| Primary source content | One Appendix C Excel workbook and 109 Appendix E shapefiles |
+| Daughter output | `YYYYMMDD_13_BCStorageAtlas_AV.gpkg` |
+| Daughter contents | `pool_units`, `pool_features`, `aquifer_units`, and `aquifer_features` |
 | Daughter CRS | EPSG:3978 — NAD83 / Canada Atlas Lambert |
 | Unified source key | `source_dataset = 'BC_STORAGE_ATLAS'` |
-| Assessment type | Quantitative geological storage screening |
-| Injectivity | Not quantitatively assessed |
+| Data class | `geological_storage_capacity` |
+| Assessment type | `quantitative_geological_storage_screening` |
+| Capacity / injectivity | Quantitative screening estimates; injectivity not quantitatively assessed |
 
 The source evaluates storage **potential**, not demonstrated capacity or
 injectivity. Its pool and aquifer estimates support regional screening and

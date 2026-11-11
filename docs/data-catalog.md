@@ -86,7 +86,42 @@ Need identity or classification?
 Do not sum a unit-scoped assessment once per mapped feature. One logical unit
 can have several spatial features.
 
+### ArcGIS Pro filtering and joining matrix
+
+Add the unified GeoPackage to the ArcGIS Pro Catalog pane, then add
+`storage_features`, `administrative_features`, `storage_units`, and
+`storage_assessments` to the map. The two spatial layers appear in the map;
+the other two appear under **Standalone Tables**.
+
+For each intended map, make a copy of the applicable spatial layer and set its
+filter under **Layer Properties → Definition Query**. Then use
+**Joins and Relates → Add Join** only where the matrix specifies one.
+
+| ArcGIS map view | Starting layer and definition query | Assessment join | Identity join | Critical interpretation rule |
+| --- | --- | --- | --- | --- |
+| NATCARB saline | `storage_features`: `source_dataset = 'NATCARB' AND source_layer = 'saline_resource_cells'` | Join `storage_assessments` on `storage_feature_id` | Join `storage_units` on `storage_unit_id` | Feature-scoped capacity; consult the daughter assessed, overlap, and duplicate flags before summing |
+| NATCARB coal | `storage_features`: `source_dataset = 'NATCARB' AND source_layer = 'coal_resource_cells'` | Join `storage_assessments` on `storage_feature_id` | Join `storage_units` on `storage_unit_id` | Feature-scoped capacity; do not combine with the daughter area representation |
+| NATCARB oil/gas | `storage_features`: `source_dataset = 'NATCARB' AND source_layer = 'oil_gas_resources'` | Join `storage_assessments` on `storage_feature_id` | Join `storage_units` on `storage_unit_id` | Feature-scoped resource estimates are screening values, not permitted capacity |
+| BC pools or aquifers | `storage_features`: `source_dataset = 'BC_STORAGE_ATLAS' AND source_layer = 'pool_features'` or `source_layer = 'aquifer_features'` | Join `storage_assessments` on `storage_unit_id` | Join `storage_units` on `storage_unit_id` | Unit-scoped values can repeat across multiple mapped features; never sum the repeated joined value |
+| Atlantic COS | `storage_features`: `source_dataset = 'ATLANTIC_COS' AND source_layer = 'storage_units'` | Join `storage_assessments` on `storage_feature_id` | Join `storage_units` on `storage_unit_id` | COS is feature-scoped prospectivity, not tonnes of storage |
+| AER agreements | `administrative_features`: `source_dataset = 'AER Carbon Sequestration Agreements' AND source_layer = 'aer_agreements'` | None | None | One row per agreement; use this representation for agreement counts and agreement-level area |
+| AER source tracts | `administrative_features`: `source_dataset = 'AER Carbon Sequestration Agreements' AND source_layer = 'aer_agreement_tracts'` | None | None | Tracts are children of agreements; do not count agreements and tracts together |
+
+For an assessment join, use the matrix field as both the **Input Join Field**
+and the **Join Table Field**. For an identity join, use `storage_unit_id` on
+both sides. The identifiers are stable and globally unique within the unified
+artifact.
+
+Joins are temporary map-layer properties. To create a separate derived file,
+right-click the filtered and joined layer and use **Data → Export Features**.
+Do not overwrite the authoritative unified GeoPackage, and record the source
+filename, definition query, and join fields with the exported result.
+
 ## Daughter 1: AER Carbon Sequestration Agreements
+
+See the [detailed AER agreements guide](datasets/aer-agreements.md) for the
+agreement/tract hierarchy, administrative categories, area fields, legal
+interpretation limits, maps, and unified parent-child linkage.
 
 ### What the source contains
 
@@ -337,17 +372,6 @@ The unified GeoPackage registers five non-spatial documentation tables in
 
 The CSV files beside a GeoPackage are convenient sidecars. The registered
 GeoPackage tables are the authoritative package contents.
-
-## Possible future map refinements
-
-The current figures are working sketches. The next visual pass should use a
-consistent source colour across raw, daughter, and unified views and provide:
-
-- a national locator for every daughter;
-- a regional detail map for Alberta and its tenure agreements;
-- grouped maps for additional BC supporting layer families; and
-- a clear distinction between source geometry, daughter geometry, and the
-  Canadian subset carried into the unified atlas.
 
 Continue with the [beginner quickstart](quickstart.md) for setup and GIS use or
 the [schema contract](schema.md) for stable field meanings.

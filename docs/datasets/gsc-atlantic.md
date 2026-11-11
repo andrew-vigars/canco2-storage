@@ -8,17 +8,24 @@ represented in the unified Canadian atlas.
 
 | Item | Value |
 | --- | --- |
-| Provider | Natural Resources Canada, Geological Survey of Canada |
-| Publication | Carey et al. (2023), *Preliminary assessment of geological carbon-storage potential of Atlantic Canada* |
+| Source organization | Natural Resources Canada, Geological Survey of Canada |
+| Source product | *Preliminary assessment of geological carbon-storage potential of Atlantic Canada* |
 | Series | Geological Survey of Canada Open File 8996 |
+| Geographic scope | Atlantic Canada and adjacent offshore assessment areas |
+| Published date | 2023 |
+| Data current as of | Not separately stated in the source metadata |
+| Update cadence | Static publication |
+| Source access | [Government of Canada publication record](https://ostrnrcan-dostrncan.canada.ca/entities/publication/b6140ab8-c5fd-4ad2-b9ed-65c32ff2bb17) |
 | DOI | [10.4095/332145](https://doi.org/10.4095/332145) |
-| Source page | [Government of Canada publication record](https://ostrnrcan-dostrncan.canada.ca/entities/publication/b6140ab8-c5fd-4ad2-b9ed-65c32ff2bb17) |
 | Licence | [Open Government Licence – Canada](https://open.canada.ca/en/open-government-licence-canada) |
-| Source files | 15 polygon shapefiles |
-| Daughter spatial layer | <code>storage_units</code> |
-| Daughter features | 4,711 |
-| Unified source identifier | <code>ATLANTIC_COS</code> |
-| Data role | Qualitative geological prospectivity |
+| Primary source content | 15 polygon shapefiles |
+| Daughter output | <code>YYYYMMDD_13_AtlanticStorageCOS_AV.gpkg</code> |
+| Daughter contents | <code>storage_units</code>, containing 4,711 source polygons |
+| Daughter CRS | EPSG:3978 — NAD83 / Canada Atlas Lambert |
+| Unified source key | <code>source_dataset = 'ATLANTIC_COS'</code> |
+| Data class | <code>geological_prospectivity</code> |
+| Assessment type | <code>qualitative_chance_of_success</code> |
+| Capacity / injectivity | No capacity data; injectivity not quantitatively assessed |
 
 COS expresses geological Chance of Success. It is not a storage-capacity
 estimate, an injectivity value, a permitted resource, or a project-readiness

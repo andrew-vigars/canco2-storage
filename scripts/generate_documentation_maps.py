@@ -24,6 +24,7 @@ UNIFIED_DIR = PROJECT_ROOT / "data" / "processed" / "unified_storage"
 BC_DIR = PROJECT_ROOT / "data" / "processed" / "gbc_ne_atlas"
 NATCARB_DIR = PROJECT_ROOT / "data" / "processed" / "natcarb_doe"
 GSC_DIR = PROJECT_ROOT / "data" / "processed" / "gsc_atlantic"
+AER_DIR = PROJECT_ROOT / "data" / "processed" / "aer_agreements"
 BOUNDARY = (
     PROJECT_ROOT / "data" / "raw" / "basemaps" / "digital" / "lpr_000a21a_e.shp"
 )
@@ -93,6 +94,20 @@ def newest_gsc_package() -> Path:
         raise FileNotFoundError(
             f"No GSC Atlantic GeoPackage found under {GSC_DIR}. "
             "Run the GSC Atlantic Silver workflow first."
+        )
+    return packages[-1]
+
+
+def newest_aer_package() -> Path:
+    """Return the newest dated AER daughter GeoPackage."""
+
+    packages = sorted(
+        AER_DIR.glob("*_13_AERCarbonSequestrationAgreements_AV.gpkg")
+    )
+    if not packages:
+        raise FileNotFoundError(
+            f"No AER GeoPackage found under {AER_DIR}. "
+            "Run the AER Silver workflow first."
         )
     return packages[-1]
 
@@ -816,6 +831,93 @@ def generate_gsc_details(package: Path, output_dir: Path) -> None:
     )
 
 
+def generate_aer_details(package: Path, output_dir: Path) -> None:
+    """Create detailed AER agreement-group and tract-hierarchy maps."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    boundary = gpd.read_file(BOUNDARY).to_crs(3978)
+    agreements = gpd.read_file(package, layer="aer_agreements").to_crs(3978)
+    tracts = gpd.read_file(package, layer="aer_agreement_tracts").to_crs(3978)
+    bounds = _padded_bounds(agreements)
+
+    group_specs = [
+        ("APP", "Applications", "#d9a441", "#906817"),
+        ("PERMIT", "Permits", "#4a89bd", "#2b6089"),
+        ("LEASE", "Leases", "#4f9c72", "#2f6b4c"),
+    ]
+    group_counts = agreements["agreement_group"].value_counts().to_dict()
+    group_layers = [
+        MapLayer(
+            f"{label} ({group_counts.get(key, 0):,})",
+            [_dissolve(agreements.loc[agreements.agreement_group.eq(key)], 500)],
+            fill,
+            stroke,
+        )
+        for key, label, fill, stroke in group_specs
+    ]
+    (output_dir / "aer-agreement-groups.svg").write_text(
+        _map_svg(
+            "AER carbon-sequestration agreement groups",
+            "One dissolved feature per agreement; all current records are active pore-space tenure.",
+            boundary,
+            group_layers,
+            bounds,
+            width=1050,
+            legend_width=330,
+        ),
+        encoding="utf-8",
+    )
+
+    multi = sorted(
+        agreements.loc[agreements.tract_count.gt(1), "agreement_id"].tolist()
+    )
+    if len(multi) != 2:
+        raise ValueError(
+            "Expected two multi-tract AER agreements in the reference build, "
+            f"found {len(multi)}."
+        )
+    single = agreements.loc[agreements.tract_count.eq(1)]
+    hierarchy_specs = [
+        (
+            f"Single-tract agreements ({len(single):,})",
+            single,
+            "#d8dedb",
+            "#87938e",
+            0.68,
+        ),
+        (
+            f"Agreement {multi[0]} (2 tracts)",
+            tracts.loc[tracts.agreement_id.eq(multi[0])],
+            "#dda64b",
+            "#946b1c",
+            0.86,
+        ),
+        (
+            f"Agreement {multi[1]} (2 tracts)",
+            tracts.loc[tracts.agreement_id.eq(multi[1])],
+            "#936cb1",
+            "#62467b",
+            0.86,
+        ),
+    ]
+    hierarchy_layers = [
+        MapLayer(label, [_dissolve(frame, 350)], fill, stroke, opacity)
+        for label, frame, fill, stroke, opacity in hierarchy_specs
+    ]
+    (output_dir / "aer-tract-hierarchy.svg").write_text(
+        _map_svg(
+            "AER agreement and source-tract hierarchy",
+            "Most agreements contain one tract; the four colored source tracts form two agreements.",
+            boundary,
+            hierarchy_layers,
+            bounds,
+            width=1080,
+            legend_width=390,
+        ),
+        encoding="utf-8",
+    )
+
+
 def generate_natcarb_details(
     package: Path,
     unified_package: Path,
@@ -1099,10 +1201,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bc-package", type=Path, default=None)
     parser.add_argument("--natcarb-package", type=Path, default=None)
     parser.add_argument("--gsc-package", type=Path, default=None)
+    parser.add_argument("--aer-package", type=Path, default=None)
     parser.add_argument("--output-dir", type=Path, default=OUTPUT_DIR)
     parser.add_argument(
         "--only",
-        choices=("all", "bc-details", "gsc-details", "natcarb-details"),
+        choices=(
+            "all",
+            "aer-details",
+            "bc-details",
+            "gsc-details",
+            "natcarb-details",
+        ),
         default="all",
         help="Generate overview maps or one dataset's detailed maps.",
     )
@@ -1111,7 +1220,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    if args.only == "bc-details":
+    if args.only == "aer-details":
+        generate_aer_details(
+            args.aer_package or newest_aer_package(),
+            args.output_dir,
+        )
+    elif args.only == "bc-details":
         generate_bc_details(
             args.bc_package or newest_bc_package(),
             args.output_dir,

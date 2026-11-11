@@ -17,7 +17,7 @@ and administrative features remain separate.
 | If you want to… | Read or run |
 | --- | --- |
 | Understand what is in the unified file | [Data catalog and maps](docs/data-catalog.md) |
-| Query it safely with Python or SQL | [Query guide](docs/quickstart.md) |
+| Build and open the atlas for the first time | [Beginner quickstart](docs/quickstart.md) |
 | Understand fields and table grain | [Schema contract](docs/schema.md) |
 | Rebuild the data products | [Workflow](docs/workflow.md) |
 | Run a working read-only example | `python examples/unified_quickstart.py` |
@@ -25,6 +25,72 @@ and administrative features remain separate.
 Install the package with `python -m pip install -e .` before running the
 commands or examples. The [workflow guide](docs/workflow.md) documents build
 dependencies, selective reruns, validation, and the complete pipeline diagram.
+
+## Workflow and data structure
+
+```mermaid
+flowchart LR
+    subgraph source["Public source datasets"]
+        direction TB
+        SN["DOE/NETL NATCARB<br/>File Geodatabase"]
+        SB["Geoscience BC Atlas<br/>shapefiles and tables"]
+        SG["GSC Open File 8996<br/>15 shapefiles"]
+        SA["AER agreements<br/>shapefile"]
+        SC["Statistics Canada<br/>national boundary"]
+    end
+
+    subgraph bronze["Bronze: retained source files"]
+        direction TB
+        BN["NATCARB raw archive"]
+        BB["BC Atlas raw package"]
+        BG["GSC raw package"]
+        BA["AER raw package"]
+        BC["Boundary shapefile"]
+    end
+
+    subgraph silver["Silver: source-specific daughter GeoPackages"]
+        direction TB
+        DN["NATCARB daughter"]
+        DB["Northeast BC daughter"]
+        DG["Atlantic COS daughter"]
+        DA["AER agreements daughter"]
+    end
+
+    subgraph unified["Unified Canadian GeoPackage"]
+        direction TB
+        U["Canonical integration"]
+        TU["storage_units<br/>logical geological units"]
+        TF["storage_features<br/>spatial representations"]
+        TS["storage_assessments<br/>capacity and prospectivity"]
+        TA["administrative_features<br/>regulatory tenure"]
+
+        U --> TU
+        U --> TF
+        U --> TS
+        U --> TA
+    end
+
+    SN --> BN --> DN --> U
+    SB --> BB --> DB --> U
+    SG --> BG --> DG --> U
+    SA --> BA --> DA --> U
+    SC --> BC -. "Canadian spatial selection" .-> U
+
+    classDef sourceFile fill:#fff4cc,stroke:#9a6b00,color:#18312b
+    classDef bronzeFile fill:#f3eee4,stroke:#8c7550,color:#18312b
+    classDef daughter fill:#dceee8,stroke:#3d7b69,color:#18312b
+    classDef atlas fill:#dbe8f4,stroke:#356a91,color:#18312b
+    class SN,SB,SG,SA,SC sourceFile
+    class BN,BB,BG,BA,BC bronzeFile
+    class DN,DB,DG,DA daughter
+    class U,TU,TF,TS,TA atlas
+```
+
+Bronze files retain the provider inputs. Each Silver daughter preserves its
+source-specific layers, identifiers, metadata, and QA. The unified GeoPackage
+then provides common tables for cross-source queries without treating unlike
+geometries or assessments as interchangeable. The Statistics Canada boundary
+supports Canadian spatial selection; it is not a fifth storage daughter.
 
 The built artifact is under `data/processed/unified_storage/`. To locate the
 newest version programmatically:

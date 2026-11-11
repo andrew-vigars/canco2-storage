@@ -2929,7 +2929,9 @@ def build_unified_metadata(source_catalog: pd.DataFrame) -> pd.DataFrame:
             "storage capacity, demonstrated injectivity, permitted injection capacity, "
             "legal storage rights, or site-specific geological suitability. "
             "Source-specific limitations remain authoritative and should be consulted "
-            "through source_metadata.",
+            "through source_metadata. NATCARB source-native provider flags and domain "
+            "tables remain in its precursor Silver package and are not promoted to "
+            "the unified canonical tables.",
         ),
         (
             "keywords",

@@ -213,9 +213,16 @@ def _field_definition(field: str) -> str:
         "source_layer": "Source layer or representation name.",
         "source_unit_id": "Source identifier for the logical storage unit.",
         "source_feature_id": "Source identifier for the spatial feature.",
+        "assessment_scope": (
+            "Grain of the assessment record and declaration of its valid "
+            "parent join key."
+        ),
         "assessment_type": "Type of assessment represented by the record.",
         "data_class": "Semantic role of the record in the unified product.",
-        "capacity_data": "Whether quantitative source capacity data are present.",
+        "capacity_data": (
+            "Whether the source representation is classified as "
+            "capacity-bearing."
+        ),
         "injectivity_status": "Source-dependent injectivity information status.",
         "geometry_area_m2": "Area of the persisted geometry.",
         "geometry_area_ha": "Area of the persisted geometry.",
@@ -253,7 +260,13 @@ def _field_units(field: str) -> str:
 def _field_origin(field: str) -> str:
     if field.startswith("source_") or field in {"storage_unit_id", "storage_feature_id", "storage_assessment_id"}:
         return "provenance"
-    if field in {"assessment_type", "data_class", "capacity_data", "injectivity_status"}:
+    if field in {
+        "assessment_scope",
+        "assessment_type",
+        "data_class",
+        "capacity_data",
+        "injectivity_status",
+    }:
         return "harmonized"
     return "source-dependent"
 
@@ -264,7 +277,17 @@ def _field_notes(field: str) -> str:
     if field in {"reservoir_cos", "seal_cos", "trap_cos", "total_cos"}:
         return "Chance-of-success measure where supplied; not storage capacity."
     if field == "capacity_data":
-        return "False does not permit capacity to be inferred."
+        return (
+            "True does not guarantee a non-null estimate; inspect the "
+            "applicable storage_assessments fields. False does not permit "
+            "capacity to be inferred."
+        )
+    if field == "assessment_scope":
+        return (
+            "Filter by scope before joining: feature joins to storage_features "
+            "on storage_feature_id; unit joins to storage_units on "
+            "storage_unit_id."
+        )
     return ""
 
 
@@ -517,14 +540,16 @@ Keywords:
 - `{qa_summary_filename}` - persisted precursor and unified QA export.
 - `{field_dictionary_filename}` - unified canonical field dictionary.
 
-## Researcher quickstart
+## Using the atlas
 
-The repository includes `docs/quickstart.md` and an executable
-`examples/unified_quickstart.py` for opening this GeoPackage, joining
-assessments at the correct grain, filtering NATCARB representations, and
-separating capacity, prospectivity, and tenure. The GeoPackage is the primary
-data artifact; the quickstart does not create a second database or a
-pre-aggregated capacity layer.
+The repository includes `docs/quickstart.md` for beginner installation, build,
+and GIS steps; `docs/data-catalog.md` for table selection, filtering, and
+grain-safe joins; and an executable `examples/unified_quickstart.py` for a
+read-only Python example. The GeoPackage is the primary data artifact; these
+resources do not create a second database or a pre-aggregated capacity layer.
+NATCARB provider assessed, overlap, duplicate, P50-method, and partnership
+fields remain in the NATCARB daughter package and are not copied into the
+unified canonical tables.
 
 ## Use limitations
 

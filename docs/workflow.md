@@ -24,7 +24,7 @@ flowchart TD
     Unified --> UnifiedQA["Write and validate unified GeoPackage"]
     UnifiedQA --> Tables["storage_units · storage_features<br/>storage_assessments · administrative_features<br/>Source catalog, metadata, and QA"]
     Tables --> Docs["Generate unified README and CSV sidecars"]
-    Docs --> Research["Researcher quickstart / GIS / downstream analysis"]
+    Docs --> Research["Beginner quickstart / GIS / downstream analysis"]
 ```
 
 The diagram shows data dependencies. Execution is sequential in registry order:
@@ -94,9 +94,11 @@ The unified GeoPackage contains four canonical tables:
 Unified metadata, QA, source catalog, and complete precursor metadata and QA
 lineage are persisted in additional registered attribute tables. The unified
 README and sidecar inventories are generated from the persisted GeoPackage.
-The [researcher quickstart](quickstart.md) is the recommended first-five-minutes
-workflow and reads this GeoPackage directly without creating a second database
-or pre-aggregated capacity artifact.
+The [beginner quickstart](quickstart.md) covers installation, building, and
+opening the atlas in ArcGIS Pro or QGIS. The [data catalog](data-catalog.md)
+provides the compact filtering and grain-safe joining matrix. The GeoPackage
+remains the primary data artifact; neither guide creates a second database or
+pre-aggregated capacity layer.
 
 Saline and coal cells are selected by intersection with the Canadian boundary;
 their geometries and resource estimates are retained whole, without clipping

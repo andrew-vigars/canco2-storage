@@ -394,8 +394,9 @@ Use `formation` in unified `storage_units` for formation-level selection. Use
 the daughter package when the analysis requires `map_group`, property ranges,
 production history, source-shapefile values, or QA comparison flags.
 
-Detailed ArcGIS Pro, QGIS, GeoPandas, and SQLite procedures will be maintained
-in the [query guide](../quickstart.md).
+Setup and ArcGIS Pro or QGIS procedures are in the
+[beginner quickstart](../quickstart.md). Use the [data catalog](../data-catalog.md)
+for the compact filtering and joining matrix.
 
 ## Interpretation checklist
 

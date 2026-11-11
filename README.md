@@ -164,7 +164,8 @@ layer names, and interpretation notes for every source.
   suitability.
 - Null capacity means no estimate was supplied; it does not mean zero.
 - NATCARB grid cells and polygons are different representations. Do not add
-  them together or ignore provider duplicate/overlap flags.
+  them together. Provider assessed, duplicate, and overlap flags remain in the
+  NATCARB daughter package and must be checked there before aggregation.
 - Source IDs are valid within their documented source and layer. Geographic
   overlap does not establish a cross-source geological identity.
 
@@ -216,7 +217,7 @@ canco2-storage/
 ├── data/
 │   ├── raw/                  # retained Bronze inputs
 │   └── processed/            # source Silver packages and unified atlas
-├── docs/                     # query guide, catalog, schema, workflow
+├── docs/                     # guides, catalog, schema, and workflow
 ├── examples/                 # executable read-only examples
 ├── notebooks/                # exploratory source analysis
 ├── scripts/                  # workflow and documentation entry points

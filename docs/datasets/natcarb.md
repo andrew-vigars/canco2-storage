@@ -341,8 +341,9 @@ To use `basin_name`, join `storage_features` to `storage_units` with
 `storage_unit_id`. Do not expect `basin_name` to be complete or available for
 coal and oil/gas resources.
 
-Detailed ArcGIS Pro, QGIS, GeoPandas, and SQLite procedures will be maintained
-in the [query guide](../quickstart.md).
+Setup and ArcGIS Pro or QGIS procedures are in the
+[beginner quickstart](../quickstart.md). Use the [data catalog](../data-catalog.md)
+for the compact filtering and joining matrix.
 
 ## Interpretation checklist
 

@@ -327,7 +327,11 @@ and domain tables.
 Ten provider domain tables are normalized and retained in the daughter package
 as `domain_*` tables. They document coded values such as assessed status,
 overlap, duplication, fuel, partnership, and source type. They are not copied
-into the unified atlas as standalone tables.
+into the unified atlas as standalone tables. The corresponding row-level
+provider flags are also not fields in the unified canonical tables. Where a
+cross-package check is needed, first select one unified NATCARB `source_layer`,
+then link `storage_features.source_feature_id` to `natcarb_id` in its matching
+daughter layer.
 
 ### Daughter GeoPackage
 
@@ -353,8 +357,9 @@ features, and 29,271 feature-scoped assessments.
   `saline_resource_cells`, `coal_resource_cells`, or `oil_gas_resources`.
 - Treat capacity as feature-scoped and join assessments with
   `storage_feature_id`.
-- Inspect the daughter domain tables and source-native `ASSESSED`, `OVERLAP`,
-  and `DUPLICATE` semantics before aggregation.
+- Inspect the daughter layer fields and domain tables for source-native
+  `ASSESSED`, `OVERLAP`, and `DUPLICATE` semantics before aggregation; these
+  flags are not present in the unified canonical tables.
 - Do not assume that overlapping polygons have been deduplicated.
 
 ## Documentation and lineage tables

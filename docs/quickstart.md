@@ -1,11 +1,12 @@
-# Researcher Quickstart
+# Query Guide
 
-This guide uses the unified GeoPackage directly. It does not create a second
-SQLite database, SQL export, or pre-aggregated capacity layer.
+This guide queries the unified GeoPackage directly with GeoPandas or standard
+SQLite. It does not create a second database or a pre-aggregated capacity
+artifact.
 
-## Open the package
+## 1. Find and inspect the package
 
-Use the most recent file under `data/processed/unified_storage/`:
+Run examples from the repository root:
 
 ```python
 from pathlib import Path
@@ -17,183 +18,279 @@ package = sorted(
     )
 )[-1]
 
+print(gpd.list_layers(package).to_string(index=False))
+```
+
+The four canonical tables are:
+
+| Table | Grain | Geometry |
+| --- | --- | --- |
+| `storage_units` | One logical geological storage unit | No |
+| `storage_features` | One spatial representation of a unit | Yes |
+| `storage_assessments` | One assessment record | No |
+| `administrative_features` | One agreement or tenure feature | Yes |
+
+Read them as follows:
+
+```python
 units = gpd.read_file(package, layer="storage_units", ignore_geometry=True)
 features = gpd.read_file(package, layer="storage_features")
 assessments = gpd.read_file(
-    package,
-    layer="storage_assessments",
-    ignore_geometry=True,
+    package, layer="storage_assessments", ignore_geometry=True
 )
 tenure = gpd.read_file(package, layer="administrative_features")
 ```
 
-The GeoPackage can also be opened directly in QGIS or ArcGIS Pro. All spatial
-layers use EPSG:3978, NAD83 / Canada Atlas Lambert.
+## 2. Inventory sources and layers
 
-## Choose the table by grain
+Start with counts before filtering:
 
-| Table | Grain | Use |
-| --- | --- | --- |
-| `storage_units` | One logical geological storage unit | Unit identity and source classification |
-| `storage_features` | One spatial representation | Mapping and spatial selection |
-| `storage_assessments` | One capacity, prospectivity, or related assessment | Quantitative or qualitative assessment values |
-| `administrative_features` | One regulatory or tenure feature | AER agreement and tract mapping |
+```python
+print(units.groupby("source_dataset").size().rename("logical_units"))
 
-The central rule is: **a spatial feature is not automatically a capacity record**.
-A logical unit can have multiple spatial features, and one assessment can apply
-to a unit rather than to each feature.
+print(
+    features.groupby(
+        ["source_dataset", "source_layer", "representation"],
+        dropna=False,
+    )
+    .size()
+    .rename("features")
+)
 
-## Join assessments safely
+print(
+    assessments.groupby(
+        ["source_dataset", "source_layer", "assessment_scope"],
+        dropna=False,
+    )
+    .size()
+    .rename("assessments")
+)
+```
 
-Use the assessment scope to choose the join key:
+Use exact values from these columns when filtering; they are the provenance
+keys for the canonical rows.
+
+## 3. Join assessments at the correct grain
+
+An assessment declares whether it applies to one spatial feature or one logical
+unit. Split first, then validate each join:
 
 ```python
 feature_assessments = assessments.loc[
     assessments["assessment_scope"].eq("feature")
 ].merge(
-    features[["storage_feature_id", "storage_unit_id", "source_layer"]],
-    on="storage_feature_id",
+    features[
+        ["storage_feature_id", "storage_unit_id", "representation"]
+    ],
+    on=["storage_feature_id", "storage_unit_id"],
     how="left",
-    validate="many_to_one",
+    validate="one_to_one",
 )
 
 unit_assessments = assessments.loc[
     assessments["assessment_scope"].eq("unit")
 ].merge(
     units[
-        [
-            "storage_unit_id",
-            "storage_name",
-            "data_class",
-            "capacity_data",
-        ]
+        ["storage_unit_id", "storage_name", "data_class", "capacity_data"]
     ],
     on="storage_unit_id",
     how="left",
-    validate="many_to_one",
+    validate="one_to_one",
 )
 ```
 
-Use `storage_feature_id` for feature-scoped assessments and
-`storage_unit_id` for unit-scoped assessments. Do not join unit-scoped
-assessments to every feature before summing capacity; that duplicates values for
-multi-feature units.
+Do not join unit-scoped assessments to every feature before summing. A logical
+unit can have multiple spatial representations, which would duplicate its
+assessment.
 
-## Summarize capacity
+## 4. Query one source or storage type
 
-For a first screening summary, aggregate only unit-scoped, quantitative
-capacity assessments:
-
-```python
-capacity = unit_assessments.loc[
-    unit_assessments["data_class"].eq("geological_storage_capacity")
-    & unit_assessments["capacity_data"].fillna(False).astype(bool)
-    & unit_assessments["storage_p50_tonnes"].notna()
-]
-
-summary = (
-    capacity.groupby(["source_dataset", "source_layer"], dropna=False)
-    .agg(
-        assessment_count=("storage_assessment_id", "size"),
-        p50_tonnes=("storage_p50_tonnes", "sum"),
-    )
-    .reset_index()
-)
-print(summary)
-```
-
-This is a source-level screening summary, not a deduplicated national storage
-capacity estimate. Preserve `source_dataset`, `source_layer`, `capacity_method`,
-and source-specific QA flags when interpreting or aggregating results. Null
-capacity means that the source did not provide an estimate; it is not zero.
-
-## Filter NATCARB representations
-
-The unified product preserves representation and source-layer distinctions:
+NATCARB saline, coal, and oil/gas representations:
 
 ```python
 natcarb = features.loc[features["source_dataset"].eq("NATCARB")]
 
-natcarb_grid_cells = natcarb.loc[
-    natcarb["source_layer"].isin(
-        ["saline_resource_cells", "coal_resource_cells"]
-    )
+saline = natcarb.loc[
+    natcarb["source_layer"].eq("saline_resource_cells")
 ]
-
-natcarb_oil_gas = natcarb.loc[
+coal = natcarb.loc[
+    natcarb["source_layer"].eq("coal_resource_cells")
+]
+oil_gas = natcarb.loc[
     natcarb["source_layer"].eq("oil_gas_resources")
 ]
 ```
 
-The unified package contains the Canadian NATCARB saline and coal grid-cell
-subset plus Canadian oil-and-gas resource polygons. The saline and coal area
-representations remain in the NATCARB Silver package and are not interchangeable
-with grid cells.
-
-Do not merge grid cells and polygons, count a spatial representation as a
-separate storage unit, or aggregate across provider overlap/duplicate flags
-without an explicit source-specific rule.
-
-## Keep semantic roles separate
-
-Use the classification fields before combining records:
+BC aquifers with their unit-scoped assessments:
 
 ```python
-print(
-    assessments.merge(
-        units[["storage_unit_id", "data_class", "capacity_data"]],
-        on="storage_unit_id",
-        how="left",
-        validate="many_to_one",
-    ).groupby(
-        ["data_class", "assessment_type", "capacity_data"],
+bc_aquifers = unit_assessments.loc[
+    unit_assessments["source_dataset"].eq("BC_STORAGE_ATLAS")
+    & unit_assessments["source_layer"].eq("aquifer_units")
+]
+```
+
+Atlantic qualitative prospectivity:
+
+```python
+atlantic_cos = feature_assessments.loc[
+    feature_assessments["source_dataset"].eq("ATLANTIC_COS")
+    & feature_assessments["assessment_type"].eq(
+        "qualitative_chance_of_success"
+    )
+]
+```
+
+AER agreement-level polygons, excluding the retained tract parts:
+
+```python
+aer_agreements = tenure.loc[
+    tenure["source_layer"].eq("aer_agreements")
+]
+```
+
+## 5. Filter spatially
+
+Every spatial layer is in EPSG:3978. Attribute filters are cheapest when the
+canonical province/territory field is sufficient:
+
+```python
+alberta_features = features.loc[
+    features["province_territory"].eq("Alberta")
+]
+```
+
+For an arbitrary area of interest, project it to EPSG:3978 and use a spatial
+join:
+
+```python
+area_of_interest = gpd.read_file("path/to/area_of_interest.gpkg").to_crs(3978)
+
+selected = gpd.sjoin(
+    features,
+    area_of_interest[["geometry"]],
+    how="inner",
+    predicate="intersects",
+).drop(columns="index_right")
+```
+
+`intersects` selects any touching feature; it does not apportion a source
+capacity value by overlap area.
+
+## 6. Summarize source-reported capacity
+
+Classification lives on the logical unit, so join assessments to units before
+selecting quantitative records:
+
+```python
+classified = assessments.merge(
+    units[["storage_unit_id", "data_class", "capacity_data"]],
+    on="storage_unit_id",
+    how="left",
+    validate="many_to_one",
+)
+
+capacity = classified.loc[
+    classified["data_class"].eq("geological_storage_capacity")
+    & classified["capacity_data"].fillna(False).astype(bool)
+    & classified["storage_p50_tonnes"].notna()
+]
+
+source_summary = (
+    capacity.groupby(
+        ["source_dataset", "source_layer", "assessment_scope"],
         dropna=False,
-    ).size()
+    )
+    .agg(
+        assessment_count=("storage_assessment_id", "size"),
+        source_reported_p50_tonnes=("storage_p50_tonnes", "sum"),
+    )
+    .reset_index()
 )
 ```
 
-Interpret the roles as follows:
+Keep the groups separate. This output is a source-level screening summary, not
+a deduplicated national capacity estimate. NATCARB cells can carry provider
+overlap or duplicate semantics, and spatial overlap across sources is not a
+cross-source identity rule. Null capacity is missing information, not zero.
 
-- `geological_storage_capacity`: quantitative source-reported storage-resource estimates;
-- `geological_prospectivity`: geological screening evidence such as Atlantic COS, not tonnes;
-- `regulatory_tenure`: agreement or rights evidence, not geological capacity.
+## 7. Query with SQLite
 
-For mapping, keep these outputs separate:
+A GeoPackage is a SQLite database. Standard library `sqlite3` can query
+attributes and joins without loading geometry support:
 
 ```python
-capacity_features = features.loc[
-    features["data_class"].eq("geological_storage_capacity")
-]
-prospectivity_features = features.loc[
-    features["data_class"].eq("geological_prospectivity")
-]
-tenure_features = tenure
+import sqlite3
+import pandas as pd
+
+sql = """
+SELECT
+    a.source_dataset,
+    a.source_layer,
+    a.assessment_scope,
+    COUNT(*) AS assessment_count,
+    SUM(a.storage_p50_tonnes) AS source_reported_p50_tonnes
+FROM storage_assessments AS a
+JOIN storage_units AS u
+  ON u.storage_unit_id = a.storage_unit_id
+WHERE u.data_class = 'geological_storage_capacity'
+  AND u.capacity_data = 1
+  AND a.storage_p50_tonnes IS NOT NULL
+GROUP BY a.source_dataset, a.source_layer, a.assessment_scope
+ORDER BY a.source_dataset, a.source_layer;
+"""
+
+with sqlite3.connect(package) as connection:
+    summary = pd.read_sql_query(sql, connection)
+
+print(summary)
 ```
 
-## Provenance and QA
+SQLite can return the GeoPackage geometry blob, but it cannot evaluate spatial
+predicates without a compatible spatial extension. Use GeoPandas for the
+portable spatial workflow shown above.
 
-The GeoPackage exposes these registered attribute tables through `gpkg_contents`:
+Inspect metadata and validation results with SQL:
 
-- `source_catalog_canada_geological_storage_unified`
-- `source_metadata_canada_geological_storage_unified`
-- `source_qa_canada_geological_storage_unified`
-- `metadata_canada_geological_storage_unified`
-- `qa_canada_geological_storage_unified`
+```python
+metadata_sql = """
+SELECT key, value
+FROM metadata_canada_geological_storage_unified
+ORDER BY key;
+"""
 
-The companion CSV files beside the GeoPackage are convenient for spreadsheet
-inspection, but the GeoPackage tables are the authoritative package contents.
+qa_sql = """
+SELECT check, value, notes
+FROM qa_canada_geological_storage_unified
+ORDER BY check;
+"""
 
-## Run the example
+with sqlite3.connect(package) as connection:
+    metadata = pd.read_sql_query(metadata_sql, connection)
+    qa = pd.read_sql_query(qa_sql, connection)
+```
 
-From the repository root:
+## 8. Export a filtered result
+
+Keep derived data outside the authoritative package:
+
+```python
+saline.to_file(
+    "outputs/natcarb_saline_subset.gpkg",
+    layer="saline_resource_cells",
+    driver="GPKG",
+)
+```
+
+Record the source package filename and your filter logic with any derived
+output so the result can be reproduced.
+
+## Run the complete example
 
 ```bash
 python examples/unified_quickstart.py
 ```
 
-The example reads the GeoPackage, validates the expected tables and joins, and
-prints capacity, NATCARB, semantic-role, and provenance summaries. It does not
-write or modify the GeoPackage.
-
-For the stable schema contract and source-specific limitations, see
-[`docs/schema.md`](schema.md) and [`docs/workflow.md`](workflow.md).
+The example validates expected tables and joins, prints source/layer summaries,
+and does not modify the GeoPackage. See the [visual data catalog](data-catalog.md)
+for source decomposition and [schema contract](schema.md) for field meanings.

@@ -211,6 +211,10 @@ Capacity belongs to the logical unit, not to each polygon representation.
 
 ## Daughter 3: GSC Atlantic Open File 8996
 
+See the [detailed GSC Atlantic guide](datasets/gsc-atlantic.md) for all 15
+source shapefiles, assessment areas, COS-component coverage, maps, lineage,
+and query guidance.
+
 ### What the source contains
 
 The source contains 15 shapefiles grouped into two geological packages. Every
@@ -334,18 +338,16 @@ The unified GeoPackage registers five non-spatial documentation tables in
 The CSV files beside a GeoPackage are convenient sidecars. The registered
 GeoPackage tables are the authoritative package contents.
 
-## Map design still to be refined
+## Possible future map refinements
 
 The current figures are working sketches. The next visual pass should use a
 consistent source colour across raw, daughter, and unified views and provide:
 
 - a national locator for every daughter;
-- a regional detail map for Alberta, Northeast BC, and Atlantic Canada;
-- 15 labelled Atlantic small multiples, one per source shapefile;
-- grouped BC maps for canonical storage geometry and supporting layer
-  families; and
+- a regional detail map for Alberta and its tenure agreements;
+- grouped maps for additional BC supporting layer families; and
 - a clear distinction between source geometry, daughter geometry, and the
   Canadian subset carried into the unified atlas.
 
-Continue with the [query guide](quickstart.md) for Python and SQL examples or
+Continue with the [beginner quickstart](quickstart.md) for setup and GIS use or
 the [schema contract](schema.md) for stable field meanings.

@@ -8,6 +8,7 @@ remain small and readable rather than becoming exports of every source vertex.
 from __future__ import annotations
 
 import argparse
+import math
 from dataclasses import dataclass
 from html import escape
 from pathlib import Path
@@ -22,6 +23,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 UNIFIED_DIR = PROJECT_ROOT / "data" / "processed" / "unified_storage"
 BC_DIR = PROJECT_ROOT / "data" / "processed" / "gbc_ne_atlas"
 NATCARB_DIR = PROJECT_ROOT / "data" / "processed" / "natcarb_doe"
+GSC_DIR = PROJECT_ROOT / "data" / "processed" / "gsc_atlantic"
 BOUNDARY = (
     PROJECT_ROOT / "data" / "raw" / "basemaps" / "digital" / "lpr_000a21a_e.shp"
 )
@@ -79,6 +81,18 @@ def newest_natcarb_package() -> Path:
         raise FileNotFoundError(
             f"No NATCARB GeoPackage found under {NATCARB_DIR}. "
             "Run the NATCARB Silver workflow first."
+        )
+    return packages[-1]
+
+
+def newest_gsc_package() -> Path:
+    """Return the newest dated GSC Atlantic daughter GeoPackage."""
+
+    packages = sorted(GSC_DIR.glob("*_13_AtlanticStorageCOS_AV.gpkg"))
+    if not packages:
+        raise FileNotFoundError(
+            f"No GSC Atlantic GeoPackage found under {GSC_DIR}. "
+            "Run the GSC Atlantic Silver workflow first."
         )
     return packages[-1]
 
@@ -207,6 +221,122 @@ def _padded_bounds(frame: gpd.GeoDataFrame, fraction: float = 0.08):
     pad_x = max((maxx - minx) * fraction, 10_000)
     pad_y = max((maxy - miny) * fraction, 10_000)
     return minx - pad_x, miny - pad_y, maxx + pad_x, maxy + pad_y
+
+
+def _atlantic_small_multiples_svg(
+    title: str,
+    subtitle: str,
+    boundary: gpd.GeoDataFrame,
+    frames: list[tuple[str, str, gpd.GeoDataFrame]],
+    *,
+    columns: int = 3,
+) -> str:
+    """Render Atlantic source units with a shared total-COS color scale."""
+
+    width = 1200
+    panel_width = 368
+    panel_height = 250
+    gap = 18
+    left = 30
+    top = 145
+    rows = math.ceil(len(frames) / columns)
+    height = top + rows * panel_height + max(rows - 1, 0) * gap + 35
+    bins = [0, 0.05, 0.10, 0.20, 0.40, 1.000001]
+    specs = [
+        ("0–<0.05", "#eff3ff", "#b6c8e5"),
+        ("0.05–<0.10", "#c6dbef", "#8caeca"),
+        ("0.10–<0.20", "#9ecae1", "#6496b5"),
+        ("0.20–<0.40", "#4292c6", "#276b96"),
+        ("0.40–1.00", "#08519c", "#05366a"),
+    ]
+    svg = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" '
+        f'height="{height}" viewBox="0 0 {width} {height}" role="img" '
+        'aria-labelledby="title desc">',
+        f'<title id="title">{escape(title)}</title>',
+        f'<desc id="desc">{escape(subtitle)}</desc>',
+        f'<rect width="{width}" height="{height}" rx="18" fill="{WATER}"/>',
+        f'<text x="30" y="42" font-family="Segoe UI,Arial,sans-serif" '
+        f'font-size="25" font-weight="700" fill="{INK}">{escape(title)}</text>',
+        f'<text x="30" y="68" font-family="Segoe UI,Arial,sans-serif" '
+        f'font-size="14" fill="{MUTED}">{escape(subtitle)}</text>',
+        f'<text x="30" y="102" font-family="Segoe UI,Arial,sans-serif" '
+        f'font-size="12" font-weight="700" fill="{INK}">TOTAL COS</text>',
+    ]
+    legend_x = 118
+    for index, (label, fill, stroke) in enumerate(specs):
+        x = legend_x + index * 165
+        svg.extend(
+            [
+                f'<rect x="{x}" y="88" width="18" height="18" rx="3" '
+                f'fill="{fill}" stroke="{stroke}"/>',
+                f'<text x="{x + 27}" y="102" '
+                'font-family="Segoe UI,Arial,sans-serif" font-size="12" '
+                f'fill="{INK}">{escape(label)}</text>',
+            ]
+        )
+
+    for index, (unit_name, assessment_area, frame) in enumerate(frames):
+        row, column = divmod(index, columns)
+        panel_x = left + column * (panel_width + gap)
+        panel_y = top + row * (panel_height + gap)
+        map_x, map_y = panel_x + 10, panel_y + 54
+        map_width, map_height = panel_width - 20, panel_height - 68
+        minx, miny, maxx, maxy = _padded_bounds(frame, 0.06)
+        span_x = max(maxx - minx, 1)
+        span_y = max(maxy - miny, 1)
+        scale = min(map_width / span_x, map_height / span_y)
+        draw_width, draw_height = span_x * scale, span_y * scale
+        origin_x = map_x + (map_width - draw_width) / 2
+        origin_y = map_y + (map_height - draw_height) / 2
+
+        def transform(x: float, y: float) -> tuple[float, float]:
+            return (
+                origin_x + (x - minx) * scale,
+                origin_y + (maxy - y) * scale,
+            )
+
+        clip = box(minx, miny, maxx, maxy)
+        land = boundary.geometry.union_all().intersection(clip).simplify(
+            max(span_x, span_y) / 900,
+            preserve_topology=True,
+        )
+        svg.extend(
+            [
+                f'<rect x="{panel_x}" y="{panel_y}" width="{panel_width}" '
+                f'height="{panel_height}" rx="9" fill="#ffffff" stroke="{GRID}"/>',
+                f'<text x="{panel_x + 12}" y="{panel_y + 23}" '
+                'font-family="Segoe UI,Arial,sans-serif" font-size="14" '
+                f'font-weight="700" fill="{INK}">{escape(unit_name)}</text>',
+                f'<text x="{panel_x + 12}" y="{panel_y + 43}" '
+                'font-family="Segoe UI,Arial,sans-serif" font-size="11" '
+                f'fill="{MUTED}">{escape(assessment_area)} · '
+                f'{len(frame):,} features</text>',
+                f'<path d="{_path_data(land, transform)}" fill="{LAND}" '
+                'stroke="#b3c0ba" stroke-width="0.7" fill-rule="evenodd"/>',
+            ]
+        )
+        categories = pd.cut(
+            frame["total_cos"],
+            bins=bins,
+            labels=False,
+            include_lowest=True,
+            right=False,
+        )
+        tolerance = max(span_x, span_y) / 1200
+        for category, (_, fill, stroke) in enumerate(specs):
+            subset = frame.loc[categories.eq(category)]
+            if subset.empty:
+                continue
+            geometry = _dissolve(subset, tolerance)
+            svg.append(
+                f'<path d="{_path_data(geometry, transform)}" fill="{fill}" '
+                f'stroke="{stroke}" stroke-width="0.65" opacity="0.88" '
+                'fill-rule="evenodd"/>'
+            )
+
+    svg.append("</svg>")
+    return "\n".join(svg)
 
 
 def generate(package: Path, output_dir: Path) -> None:
@@ -637,6 +767,55 @@ def generate_bc_details(package: Path, output_dir: Path) -> None:
     )
 
 
+def generate_gsc_details(package: Path, output_dir: Path) -> None:
+    """Create detailed GSC Atlantic source-unit and total-COS maps."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    boundary = gpd.read_file(BOUNDARY).to_crs(3978)
+    atlantic = gpd.read_file(package, layer="storage_units").to_crs(3978)
+
+    def unit_frames(group: str) -> list[tuple[str, str, gpd.GeoDataFrame]]:
+        group_frame = atlantic.loc[atlantic.geological_group.eq(group)]
+        records = (
+            group_frame[
+                ["storage_unit_id", "storage_unit_name", "assessment_area"]
+            ]
+            .drop_duplicates()
+            .sort_values(["assessment_area", "storage_unit_name"])
+        )
+        return [
+            (
+                row.storage_unit_name,
+                row.assessment_area,
+                group_frame.loc[
+                    group_frame.storage_unit_id.eq(row.storage_unit_id)
+                ].copy(),
+            )
+            for row in records.itertuples(index=False)
+        ]
+
+    mesozoic = unit_frames("Mesozoic-Cenozoic")
+    paleozoic = unit_frames("Upper Paleozoic")
+    (output_dir / "atlantic-mesozoic-cos.svg").write_text(
+        _atlantic_small_multiples_svg(
+            "Atlantic Mesozoic–Cenozoic storage units",
+            "Ten source layers; total COS uses one scale, while panel extents vary.",
+            boundary,
+            mesozoic,
+        ),
+        encoding="utf-8",
+    )
+    (output_dir / "atlantic-paleozoic-cos.svg").write_text(
+        _atlantic_small_multiples_svg(
+            "Atlantic Upper Paleozoic storage units",
+            "Five source layers; total COS uses one scale, while panel extents vary.",
+            boundary,
+            paleozoic,
+        ),
+        encoding="utf-8",
+    )
+
+
 def generate_natcarb_details(
     package: Path,
     unified_package: Path,
@@ -919,10 +1098,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--package", type=Path, default=None)
     parser.add_argument("--bc-package", type=Path, default=None)
     parser.add_argument("--natcarb-package", type=Path, default=None)
+    parser.add_argument("--gsc-package", type=Path, default=None)
     parser.add_argument("--output-dir", type=Path, default=OUTPUT_DIR)
     parser.add_argument(
         "--only",
-        choices=("all", "bc-details", "natcarb-details"),
+        choices=("all", "bc-details", "gsc-details", "natcarb-details"),
         default="all",
         help="Generate overview maps or one dataset's detailed maps.",
     )
@@ -940,6 +1120,11 @@ def main() -> None:
         generate_natcarb_details(
             args.natcarb_package or newest_natcarb_package(),
             args.package or newest_package(),
+            args.output_dir,
+        )
+    elif args.only == "gsc-details":
+        generate_gsc_details(
+            args.gsc_package or newest_gsc_package(),
             args.output_dir,
         )
     else:

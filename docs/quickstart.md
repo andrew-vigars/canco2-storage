@@ -244,3 +244,4 @@ designed to stop when a provider changes an expected file or schema.
 - [Workflow guide](workflow.md): selective builds, validation, and reruns
 - [NATCARB guide](datasets/natcarb.md): detailed NATCARB decomposition
 - [Northeast BC guide](datasets/bc-storage-atlas.md): pool and aquifer details
+- [GSC Atlantic guide](datasets/gsc-atlantic.md): all 15 COS source layers

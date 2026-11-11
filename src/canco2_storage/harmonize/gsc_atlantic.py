@@ -1059,9 +1059,9 @@ def validate_written_storage_layer(
             layer="storage_units",
         )
         validate_target_crs(
-        written,
-        target_crs=TARGET_CRS,
-    )
+            written,
+            target_crs=TARGET_CRS,
+        )
 
     invalid_after = int((~written.geometry.is_valid).sum())
 

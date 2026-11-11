@@ -6,7 +6,13 @@ artifact.
 
 ## 1. Find and inspect the package
 
-Run examples from the repository root:
+Run examples from the repository root after installing the package with
+`python -m pip install -e .`. If the unified GeoPackage does not exist yet,
+run `canco2-build` for the complete workflow, or `canco2-build-unified` when
+all four Silver packages and the Statistics Canada Bronze boundaries already
+exist. See the [workflow guide](workflow.md) for selective builds and reruns.
+
+Use the most recent file under `data/processed/unified_storage/`:
 
 ```python
 from pathlib import Path
@@ -120,6 +126,16 @@ oil_gas = natcarb.loc[
     natcarb["source_layer"].eq("oil_gas_resources")
 ]
 ```
+
+The saline and coal layers contain whole grid cells whose source geometry
+intersects Canada. The cells are not clipped to the national boundary, and
+their capacity values are not prorated by overlap area. Oil/gas polygons are
+selected using source-reported Canadian province or territory codes. The
+saline and coal area representations remain in the NATCARB daughter package;
+they are not interchangeable with the unified grid-cell representations.
+
+Do not combine the grid and area representations or aggregate across provider
+overlap and duplicate flags without an explicit source-specific rule.
 
 BC aquifers with their unit-scoped assessments:
 

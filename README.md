@@ -22,6 +22,10 @@ and administrative features remain separate.
 | Rebuild the data products | [Workflow](docs/workflow.md) |
 | Run a working read-only example | `python examples/unified_quickstart.py` |
 
+Install the package with `python -m pip install -e .` before running the
+commands or examples. The [workflow guide](docs/workflow.md) documents build
+dependencies, selective reruns, validation, and the complete pipeline diagram.
+
 The built artifact is under `data/processed/unified_storage/`. To locate the
 newest version programmatically:
 
@@ -130,7 +134,8 @@ canco2-build-unified
 
 Select precursor datasets with `--datasets`; use `--skip-bronze` or
 `--skip-silver` when the corresponding stage is already complete. The unified
-build still requires all four precursor Silver GeoPackages.
+build still requires all four precursor Silver GeoPackages and the Statistics
+Canada Bronze boundary files.
 
 Regenerate the documentation maps after building the unified atlas:
 

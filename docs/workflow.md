@@ -6,6 +6,32 @@ independent Silver package. The completed unified build then maps those
 packages into canonical tables while preserving source lineage and semantic
 distinctions.
 
+## Workflow diagram
+
+```mermaid
+flowchart TD
+    Build["canco2-build / scripts/build_all.py"] --> Bronze
+    subgraph Bronze["Bronze acquisition: data/raw"]
+        Sources["AER · Northeast BC · GSC Atlantic · NATCARB"]
+        Boundaries["Statistics Canada province/territory boundaries"]
+    end
+    Sources --> Harmonize["Source-specific Silver harmonization<br/>Schema mapping, geometry repair, EPSG:3978"]
+    Harmonize --> SilverQA["Write and reopen each GeoPackage<br/>Validate CRS, identifiers, counts, geometry, and tables"]
+    SilverQA --> Silver["Four Silver GeoPackages<br/>Metadata, QA, and CSV sidecars"]
+    Silver --> SourceDocs["Generate dataset READMEs"]
+    SourceDocs --> Unified["Unified build from all four Silver packages<br/>Select Canadian NATCARB records; preserve source lineage"]
+    Boundaries --> Unified
+    Unified --> UnifiedQA["Write and validate unified GeoPackage"]
+    UnifiedQA --> Tables["storage_units · storage_features<br/>storage_assessments · administrative_features<br/>Source catalog, metadata, and QA"]
+    Tables --> Docs["Generate unified README and CSV sidecars"]
+    Docs --> Research["Researcher quickstart / GIS / downstream analysis"]
+```
+
+The diagram shows data dependencies. Execution is sequential in registry order:
+all selected Bronze workflows finish before Silver starts, then each Silver
+workflow finishes its harmonization and README before the next dataset starts.
+The unified stage runs after the selected precursor workflows succeed.
+
 ## Layers
 
 ### Bronze
@@ -33,13 +59,15 @@ spatial layers are checked for:
 
 - the expected CRS;
 - unchanged feature counts and stable unique identifiers;
-- no null or empty geometries; and
+- no null geometries (shared spatial validators also reject empty geometries); and
 - valid geometries after GeoPackage serialization.
 
 Metadata and QA are stored in the GeoPackage as registered `attributes` tables.
 Source schema inventories, metadata summaries, QA summaries, field dictionaries,
-and dataset README files are emitted as sidecar files when that dataset
-workflow implements them.
+and dataset README files are emitted as sidecar files. AER generates its README
+inside the harmonizer; BC, Atlantic, and NATCARB run separate metadata modules
+after harmonization in the Silver orchestrator. Running those harmonizers
+directly does not run their README step.
 
 ### Unified atlas
 
@@ -48,6 +76,11 @@ The unified build reads the four dated Silver GeoPackages under
 `data/processed/unified_storage/`. It also reads the Statistics Canada
 province/territory boundary dataset acquired by the Bronze workflow to subset
 NATCARB saline and coal grid cells to Canada.
+
+Each precursor is selected independently by the newest date or timestamp in its
+canonical filename, with modification time breaking ties. Sources need not have
+the same build date. All four Silver packages and the boundary input are required,
+even when `canco2-build --datasets` rebuilds only a subset of precursors.
 
 The unified GeoPackage contains four canonical tables:
 
@@ -64,6 +97,12 @@ README and sidecar inventories are generated from the persisted GeoPackage.
 The [researcher quickstart](quickstart.md) is the recommended first-five-minutes
 workflow and reads this GeoPackage directly without creating a second database
 or pre-aggregated capacity artifact.
+
+Saline and coal cells are selected by intersection with the Canadian boundary;
+their geometries and resource estimates are retained whole, without clipping
+or area-based proration. Oil/gas polygons are selected by Canadian province or
+territory codes in `state_source`. Saline and coal extent polygons remain in
+Silver and are not added to the unified atlas.
 
 ## Registered datasets
 
@@ -103,6 +142,16 @@ canco2-build
 This runs Bronze acquisition, all four Silver workflows, the unified atlas,
 and unified README generation. The script equivalent is
 `python scripts/build_all.py`.
+
+Installed stage commands and their script equivalents are:
+
+| Installed command | Script | Dataset selection |
+| --- | --- | --- |
+| `canco2-run-bronze` | `python scripts/run_bronze.py` | Installed: `--datasets id1 id2`; script: `--dataset id1 --dataset id2` |
+| `canco2-run-silver` | `python scripts/run_silver.py` | Installed: `--datasets id1 id2`; script: `--dataset id1 --dataset id2` |
+| `canco2-build-geopackages` | `python scripts/build_geopackages.py` | `--datasets id1 id2` |
+| `canco2-build-unified` | `python scripts/build_unified.py` | Always consumes all four Silver sources |
+| `canco2-build` | `python scripts/build_all.py` | `--datasets id1 id2` limits precursor processing only |
 
 Acquire all Bronze sources:
 
@@ -156,8 +205,34 @@ python scripts/build_geopackages.py --skip-bronze
 python scripts/build_geopackages.py --skip-silver
 ```
 
-`--skip-bronze` assumes the required Bronze inputs already exist. `--skip-silver`
-performs acquisition only. Passing both skip options is rejected.
+For `build_geopackages.py`, `--skip-bronze` assumes the required Bronze inputs
+already exist, and `--skip-silver` performs acquisition only. Passing both skip
+options is rejected. For `canco2-build` / `build_all.py`, these flags affect only
+the precursor stages: the unified build still runs afterward.
+
+Validate an existing unified product without rebuilding or regenerating its README:
+
+```bash
+canco2-build-unified --validate-existing path/to/unified.gpkg
+```
+
+`--validate-existing` cannot be combined with `--project-root` or `--output`.
+The latter two options configure the unified stage; in `canco2-build`, they do
+not redirect the precursor acquisition or Silver workflows.
+
+### Rerun after a failure
+
+A failing module stops the build; later modules and stages do not run. After
+fixing the failure, rerun the affected Silver workflow to include its README:
+
+```bash
+canco2-run-silver --datasets gsc_atlantic
+```
+
+To rebuild all Silver products and then the unified atlas using existing Bronze
+inputs, run `canco2-build --skip-bronze`. If all four Silver products are already
+complete, run `canco2-build-unified`. There is no automatic resume checkpoint;
+an output file left by a failed run should not be assumed complete.
 
 For source inspection without writing Silver outputs, the GSC Atlantic, AER,
 and BC harmonizers support `--inspect-only`:
@@ -200,7 +275,7 @@ The harmonizer preserves five source representations as separate layers and
 retains ten provider domain tables. It does not remove provider duplicate or
 overlap flags, aggregate overlapping resources, merge grid and polygon
 representations, clip to Canada, or infer missing properties. See
-`schema.md` for the layer contract.
+[schema.md](schema.md) for the layer contract.
 
 ### Unified atlas
 
@@ -223,9 +298,9 @@ Output filenames use the generated-date convention
 `YYYYMMDD_13_DataType_AV`. The harmonizer chooses the run date once and writes
 it into the persisted metadata table. README generation reads that persisted
 date, rather than using the current clock, when reconstructing sidecar
-filenames. A later run therefore creates a new dated product instead of
-overwriting an earlier artifact, while all documentation for one artifact
-uses one pinned date.
+filenames. A run on a later date creates a new dated product; a same-day rerun
+replaces same-named artifacts. The unified GeoPackage includes the build variant
+suffix: `YYYYMMDD_13_CanadaGeologicalStorageUnified_AV_v2.gpkg`.
 
 This is reproducible-by-pinned-inputs, not a promise of byte-identical rebuilds:
 the source archive/workbook/GDB version, run date, Python and geospatial

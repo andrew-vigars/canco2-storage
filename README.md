@@ -35,7 +35,8 @@ flowchart LR
         SB["Geoscience BC Atlas<br/>shapefiles and tables"]
         SG["GSC Open File 8996<br/>15 shapefiles"]
         SA["AER agreements<br/>shapefile"]
-        SC["Statistics Canada 2021 Census<br/>Digital Boundary File<br/>provinces and territories"]
+        SD["Statistics Canada 2021 Census<br/>Digital Boundary File<br/>analytical boundaries"]
+        SC["Statistics Canada 2021 Census<br/>Cartographic Boundary File<br/>land and coastline"]
     end
 
     subgraph bronze["Bronze: retained source files"]
@@ -44,7 +45,8 @@ flowchart LR
         BB["BC Atlas raw package"]
         BG["GSC raw package"]
         BA["AER raw package"]
-        BC["Census boundary shapefile"]
+        BD["Digital boundary shapefile"]
+        BC["Cartographic boundary shapefile"]
     end
 
     subgraph silver["Silver: source-specific daughter GeoPackages"]
@@ -69,20 +71,26 @@ flowchart LR
         U --> TA
     end
 
+    subgraph documentation["Documentation"]
+        DM["SVG maps and previews<br/>cartographic land over blue water"]
+    end
+
     SN --> BN --> DN --> U
     SB --> BB --> DB --> U
     SG --> BG --> DG --> U
     SA --> BA --> DA --> U
-    SC --> BC -. "Canadian spatial selection" .-> U
+    SD --> BD -. "Canadian spatial selection" .-> U
+    SC --> BC -. "Land and province context" .-> DM
+    U --> DM
 
     classDef sourceFile fill:#fff4cc,stroke:#9a6b00,color:#18312b
     classDef bronzeFile fill:#f3eee4,stroke:#8c7550,color:#18312b
     classDef daughter fill:#dceee8,stroke:#3d7b69,color:#18312b
     classDef atlas fill:#dbe8f4,stroke:#356a91,color:#18312b
-    class SN,SB,SG,SA,SC sourceFile
-    class BN,BB,BG,BA,BC bronzeFile
+    class SN,SB,SG,SA,SD,SC sourceFile
+    class BN,BB,BG,BA,BD,BC bronzeFile
     class DN,DB,DG,DA daughter
-    class U,TU,TF,TS,TA atlas
+    class U,TU,TF,TS,TA,DM atlas
 ```
 
 Bronze files retain the provider inputs. Each Silver daughter preserves its
@@ -90,7 +98,16 @@ source-specific layers, identifiers, metadata, and QA. The unified GeoPackage
 then provides common tables for cross-source queries without treating unlike
 geometries or assessments as interchangeable. The Statistics Canada 2021
 Census Digital Boundary File provides province and territory boundaries for
-Canadian spatial selection; it is not a fifth storage daughter.
+Canadian spatial selection and jurisdiction assignment. The Cartographic
+Boundary File is a documentation-only basemap that provides land, coastline,
+and province-line context over blue water while leaving Atlantic offshore
+storage features visible and unclipped. Neither boundary dataset is a storage
+daughter.
+
+Statistics Canada remains the authoritative source for both boundary files.
+Because its Cloudflare protection challenges automated clients, the acquisition
+workflows download archived Data for Canada copies hosted by Source Cooperative
+while retaining the official Statistics Canada URLs for provenance.
 
 The built artifact is under `data/processed/unified_storage/`. To locate the
 newest version programmatically:
@@ -178,7 +195,7 @@ python -m pip install -e .
 python -m pip install -e ".[test]"
 ```
 
-Build Bronze inputs, the four Silver packages, and the unified atlas:
+Build the six Bronze inputs, four Silver packages, and the unified atlas:
 
 ```bash
 canco2-build
@@ -204,11 +221,24 @@ Select precursor datasets with `--datasets`; use `--skip-bronze` or
 build still requires all four precursor Silver GeoPackages and the Statistics
 Canada Bronze boundary files.
 
+The digital boundary is required by the analytical unified build. The
+cartographic boundary is required only when regenerating documentation maps.
+Acquire either support dataset independently with:
+
+```bash
+canco2-run-bronze --datasets statcan_digital_boundaries
+canco2-run-bronze --datasets statcan_cartographic_boundaries
+```
+
 Regenerate the documentation maps after building the unified atlas:
 
 ```bash
 python scripts/generate_documentation_maps.py
 ```
+
+Generated maps use cartographic land and province outlines over a blue water
+background. Storage geometries are drawn above that basemap and are not clipped
+to the cartographic land extent, so offshore Atlantic coverage remains visible.
 
 ## Repository layout
 

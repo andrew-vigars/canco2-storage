@@ -219,7 +219,7 @@ def extract_zip(
 
     extracted_files: list[Path] = []
 
-    print(f"[Extract] {zip_path.name} → {output_dir}")
+    print(f"[Extract] {zip_path.name} -> {output_dir}")
 
     with zipfile.ZipFile(zip_path, "r") as archive:
         for member in archive.infolist():

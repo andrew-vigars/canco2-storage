@@ -218,7 +218,7 @@ def validate_dataset_outputs(
         sorted(
             path
             for path in raw_dir.glob(f"{EXPECTED_STEM}.*")
-            if path.is_file()
+            if path.is_file() and path.name != ARCHIVE_NAME
         )
     )
 

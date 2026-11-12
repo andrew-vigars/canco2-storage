@@ -13,10 +13,13 @@ Counts below describe the reproducible build completed on **November 11,
 2026**. Output filenames contain the build date, and counts may change if a
 provider revises a source or the harmonization rules change.
 
-All documentation maps use the Statistics Canada 2021 province and territory
-digital boundary as geographic context. Source and output geometries are shown
-in **EPSG:3978 — NAD83 / Canada Atlas Lambert**. The maps are simplified
-overviews; the GeoPackages remain the analysis-ready artifacts.
+Documentation maps use the Statistics Canada 2021 cartographic province and
+territory boundary for land, coastline, and province-line context, with a blue
+water background so offshore storage features remain visible. The digital
+boundary remains the analytical input for Canadian filtering and jurisdiction
+assignment. Source and output geometries are shown in **EPSG:3978 — NAD83 /
+Canada Atlas Lambert**. The maps are simplified overviews; the GeoPackages
+remain the analysis-ready artifacts.
 
 ## Data lineage at a glance
 

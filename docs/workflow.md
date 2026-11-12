@@ -37,12 +37,17 @@ The unified stage runs after the selected precursor workflows succeed.
 ### Bronze
 
 Bronze is the retained source layer. The four geological sources are stored
-under `data/raw/<dataset_id>/`; the Statistics Canada 2021 Census Digital
-Boundary File is stored under `data/raw/basemaps/digital/`. Acquisition modules
-download source files, preserve provider directory structures, extract archives
-where required, and validate expected source products. A default Bronze run
-executes five acquisitions: the four geological sources plus the census
-boundary file. Bronze files are not modified by Silver processing.
+under `data/raw/<dataset_id>/`; the Statistics Canada 2021 Census digital and
+cartographic boundary files are stored under `data/raw/basemaps/digital/` and
+`data/raw/basemaps/cartographic/`, respectively. Statistics Canada remains the
+authoritative upstream source, but its Cloudflare protection challenges
+automated clients, so both boundary workflows download the archived Data for
+Canada copies hosted by Source Cooperative while retaining the upstream URLs
+for provenance. Acquisition modules download source files, preserve provider
+directory structures, extract archives where required, and validate expected
+source products. A default Bronze run executes six acquisitions: the four
+geological sources plus the two census boundary files. Bronze files are not
+modified by Silver processing.
 
 Existing completed downloads are reused. The orchestration commands do not
 expose an overwrite option; `--overwrite` is available only when an acquisition
@@ -132,8 +137,10 @@ are:
 The orchestration registries define the processing order. Supplying dataset IDs
 in another order does not change that order.
 
-`statcan_digital_boundaries` is registered for Bronze acquisition as a support
-input to the unified build. It is not a Silver storage package.
+`statcan_digital_boundaries` is registered for Bronze acquisition as an
+analytical support input to the unified build. `statcan_cartographic_boundaries`
+is a documentation-only support input used for land, coastline, and province
+outlines in generated maps. Neither dataset is a Silver storage package.
 
 ## Commands
 
@@ -152,7 +159,7 @@ The complete installed workflow is:
 canco2-build
 ```
 
-This runs all five Bronze acquisitions, all four Silver workflows, the unified
+This runs all six Bronze acquisitions, all four Silver workflows, the unified
 atlas, and unified README generation. The script equivalent is
 `python scripts/build_all.py`.
 
@@ -224,10 +231,10 @@ options is rejected. For `canco2-build` / `build_all.py`, these flags affect onl
 the precursor stages: the unified build still runs afterward.
 
 With no dataset selection, `canco2-build-geopackages` and `canco2-build`
-include all five Bronze acquisitions. Selecting only
-`statcan_digital_boundaries` runs only the census-boundary acquisition and
-validation; it does not run a Silver workflow because that dataset has no
-Silver package.
+include all six Bronze acquisitions. Selecting only
+`statcan_digital_boundaries` or `statcan_cartographic_boundaries` runs only the
+selected census-boundary acquisition and validation; it does not run a Silver
+workflow because those datasets have no Silver package.
 
 Validate an existing unified product without rebuilding or regenerating its README:
 

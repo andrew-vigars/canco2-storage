@@ -1,209 +1,248 @@
-# Researcher Quickstart
+# Beginner Quickstart
 
-This guide uses the unified GeoPackage directly. It does not create a second
-SQLite database, SQL export, or pre-aggregated capacity layer.
+This guide starts with a downloaded copy of the repository and ends with the
+Canadian geological storage atlas open in ArcGIS Pro or QGIS. No previous
+Python experience is required.
 
-## Open the package
+The workflow downloads public source datasets and builds the GeoPackages on
+your computer. Allow several hundred megabytes for downloads and a few
+gigabytes of working disk space.
 
-Run the examples from the repository root after installing the package with
-`python -m pip install -e .`. If no unified GeoPackage exists yet, run
-`canco2-build` for the complete workflow, or `canco2-build-unified` when all four
-Silver packages and the Statistics Canada Bronze boundaries already exist.
-See the [workflow guide](workflow.md) for selective builds and reruns.
+## 1. Download the repository
 
-Use the most recent file under `data/processed/unified_storage/`:
+1. Open the [canco2-storage GitHub repository](https://github.com/andrew-vigars/canco2-storage).
+2. Select **Code**, then **Download ZIP**.
+3. In File Explorer, right-click the downloaded ZIP and select **Extract All**.
+4. Move the extracted folder somewhere easy to find, such as Documents.
 
-```python
-from pathlib import Path
-import geopandas as gpd
+Do not run the workflow from inside the ZIP preview. Use the extracted folder
+that contains **pyproject.toml**, **README.md**, and the **scripts** directory.
 
-package = sorted(
-    Path("data/processed/unified_storage").glob(
-        "*_13_CanadaGeologicalStorageUnified_AV_v2.gpkg"
-    )
-)[-1]
+Git users can clone the repository instead:
 
-units = gpd.read_file(package, layer="storage_units", ignore_geometry=True)
-features = gpd.read_file(package, layer="storage_features")
-assessments = gpd.read_file(
-    package,
-    layer="storage_assessments",
-    ignore_geometry=True,
-)
-tenure = gpd.read_file(package, layer="administrative_features")
-```
+    git clone https://github.com/andrew-vigars/canco2-storage.git
+    cd canco2-storage
 
-The GeoPackage can also be opened directly in QGIS or ArcGIS Pro. All spatial
-layers use EPSG:3978, NAD83 / Canada Atlas Lambert.
+## 2. Install Python
 
-## Choose the table by grain
+The project requires **Python 3.12 or newer**. Download a current Windows
+installer from [python.org](https://www.python.org/downloads/windows/) if an
+appropriate version is not already installed.
 
-| Table | Grain | Use |
+During installation, enable **Add python.exe to PATH**. Close and reopen the
+terminal after installing Python.
+
+Open the extracted repository folder in File Explorer. Right-click an empty
+area and choose **Open in Terminal**. On Windows 10, select the address bar,
+type **powershell**, and press Enter.
+
+Check the installed version:
+
+    py --version
+
+The result should report Python 3.12 or newer.
+
+## 3. Create and activate a virtual environment
+
+A virtual environment keeps this project's Python packages separate from other
+software. Create it once from the repository folder:
+
+    py -m venv .venv
+
+Activate it in PowerShell:
+
+    .venv\Scripts\Activate.ps1
+
+The terminal prompt should now begin with **(.venv)**. If PowerShell blocks the
+activation script, run:
+
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+    .venv\Scripts\Activate.ps1
+
+The policy change applies only to the current terminal window.
+
+For Command Prompt instead of PowerShell:
+
+    .venv\Scripts\activate.bat
+
+For macOS or Linux:
+
+    python3 -m venv .venv
+    source .venv/bin/activate
+
+## 4. Install the project
+
+With **(.venv)** visible in the prompt, run:
+
+    python -m pip install --upgrade pip
+    python -m pip install -e .
+
+The second command reads the existing **pyproject.toml** and installs the
+project and its required packages. You do not need to create or initialize a
+new pyproject file. The **-e** means the installation uses the code in this
+folder.
+
+Confirm that the project command is available:
+
+    canco2-build --help
+
+## 5. Build the GeoPackages
+
+Run the complete Bronze → Silver → unified workflow:
+
+    canco2-build
+
+If the short command is not recognized, use:
+
+    python scripts\build_all.py
+
+Leave the terminal open until the command finishes. The workflow downloads
+files from the source agencies, validates them, builds four daughter
+GeoPackages, and then builds the unified Canadian atlas. A warning about a
+polygon with more than 100 parts is expected.
+
+The main output is written to:
+
+    data\processed\unified_storage\
+
+Its dated filename ends with:
+
+    _13_CanadaGeologicalStorageUnified_AV_v2.gpkg
+
+The daughter GeoPackages remain in their individual directories under
+**data\processed**.
+
+## 6. Understand the unified file
+
+The GeoPackage contains two map layers and several related tables:
+
+| Name | Type | Contents |
 | --- | --- | --- |
-| `storage_units` | One logical geological storage unit | Unit identity and source classification |
-| `storage_features` | One spatial representation | Mapping and spatial selection |
-| `storage_assessments` | One capacity, prospectivity, or related assessment | Quantitative or qualitative assessment values |
-| `administrative_features` | One regulatory or tenure feature | AER agreement and tract mapping |
+| storage_features | Map layer | BC, Atlantic, and NATCARB storage geometries |
+| administrative_features | Map layer | Alberta sequestration agreements and source tracts |
+| storage_units | Table | Logical unit names, formations, and classifications |
+| storage_assessments | Table | Capacity, geological properties, and Chance of Success |
 
-The central rule is: **a spatial feature is not automatically a capacity record**.
-A logical unit can have multiple spatial features, and one assessment can apply
-to a unit rather than to each feature.
+Other metadata, provenance, and QA tables document how the atlas was built.
 
-## Join assessments safely
+The important relationship is:
 
-Use the assessment scope to choose the join key:
+    storage_units (one) ─────< storage_features (one or more)
+           │                          │
+           └────< storage_assessments >──── unit- or feature-scoped
 
-```python
-feature_assessments = assessments.loc[
-    assessments["assessment_scope"].eq("feature")
-].merge(
-    features[["storage_feature_id", "storage_unit_id", "source_layer"]],
-    on="storage_feature_id",
-    how="left",
-    validate="many_to_one",
-)
+Do not assume every polygon has a separate capacity value. BC assessments are
+attached to logical units, while Atlantic and NATCARB assessments are attached
+to individual spatial features.
 
-unit_assessments = assessments.loc[
-    assessments["assessment_scope"].eq("unit")
-].merge(
-    units[
-        [
-            "storage_unit_id",
-            "storage_name",
-            "data_class",
-            "capacity_data",
-        ]
-    ],
-    on="storage_unit_id",
-    how="left",
-    validate="many_to_one",
-)
-```
+## 7. Open the atlas in ArcGIS Pro
 
-Use `storage_feature_id` for feature-scoped assessments and
-`storage_unit_id` for unit-scoped assessments. Do not join unit-scoped
-assessments to every feature before summing capacity; that duplicates values for
-multi-feature units.
+1. In ArcGIS Pro, open **View → Catalog Pane**.
+2. Right-click **Folders** and choose **Add Folder Connection**.
+3. Select the repository's **data\processed** folder.
+4. Expand **unified_storage**, then expand the dated GeoPackage.
+5. Drag **storage_features** and **administrative_features** onto the map.
+6. Drag **storage_units** and **storage_assessments** onto the map. They appear
+   under **Standalone Tables**.
 
-## Summarize capacity
+To add unit names and classifications to **storage_features**:
 
-For a first screening summary, aggregate only unit-scoped, quantitative
-capacity assessments:
+1. Right-click **storage_features**.
+2. Choose **Joins and Relates → Add Join**.
+3. Join **storage_features.storage_unit_id** to
+   **storage_units.storage_unit_id**.
 
-```python
-capacity = unit_assessments.loc[
-    unit_assessments["data_class"].eq("geological_storage_capacity")
-    & unit_assessments["capacity_data"].fillna(False).astype(bool)
-    & unit_assessments["storage_p50_tonnes"].notna()
-]
+To add assessment fields, first check **assessment_scope**:
 
-summary = (
-    capacity.groupby(["source_dataset", "source_layer"], dropna=False)
-    .agg(
-        assessment_count=("storage_assessment_id", "size"),
-        p50_tonnes=("storage_p50_tonnes", "sum"),
+- For Atlantic and NATCARB rows where assessment_scope is **feature**, join on
+  **storage_feature_id**.
+- For BC rows where assessment_scope is **unit**, join on
+  **storage_unit_id**.
+
+A unit-scoped BC value can appear beside several map features. Do not sum that
+repeated value across the features; it is one assessment for the logical unit.
+
+## 8. Open the atlas in QGIS
+
+1. Open **Layer → Add Layer → Add Vector Layer**.
+2. Select the dated unified GeoPackage as the source.
+3. Add **storage_features** and **administrative_features**.
+4. In the Browser panel, expand the GeoPackage and add **storage_units** and
+   **storage_assessments** as tables when needed.
+5. Use **Layer Properties → Joins** with the same IDs and assessment-scope
+   rules described for ArcGIS Pro.
+
+All unified map layers use **EPSG:3978 — NAD83 / Canada Atlas Lambert**.
+
+## 9. Optional Python check
+
+With the virtual environment active, save this as a Python script or paste it
+into a Python session to locate the newest atlas and list its layers:
+
+    from pathlib import Path
+
+    import geopandas as gpd
+
+    packages = sorted(
+        Path("data/processed/unified_storage").glob(
+            "*_13_CanadaGeologicalStorageUnified_AV_v2.gpkg"
+        )
     )
-    .reset_index()
-)
-print(summary)
-```
+    if not packages:
+        raise FileNotFoundError("Run canco2-build before this example.")
 
-This is a source-level screening summary, not a deduplicated national storage
-capacity estimate. Preserve `source_dataset`, `source_layer`, `capacity_method`,
-and source-specific QA flags when interpreting or aggregating results. Null
-capacity means that the source did not provide an estimate; it is not zero.
+    package = packages[-1]
+    print(package)
+    print(gpd.list_layers(package).to_string(index=False))
 
-## Filter NATCARB representations
+    features = gpd.read_file(package, layer="storage_features")
+    print(features.groupby(["source_dataset", "source_layer"]).size())
 
-The unified product preserves representation and source-layer distinctions:
+## 10. Return later
 
-```python
-natcarb = features.loc[features["source_dataset"].eq("NATCARB")]
+Open a terminal in the repository folder and reactivate the existing
+environment:
 
-natcarb_grid_cells = natcarb.loc[
-    natcarb["source_layer"].isin(
-        ["saline_resource_cells", "coal_resource_cells"]
-    )
-]
+    .venv\Scripts\Activate.ps1
 
-natcarb_oil_gas = natcarb.loc[
-    natcarb["source_layer"].eq("oil_gas_resources")
-]
-```
+Do not recreate **.venv** every time. To deactivate it:
 
-The unified package contains the Canadian NATCARB saline and coal grid-cell
-subset plus Canadian oil-and-gas resource polygons. The saline and coal area
-representations remain in the NATCARB Silver package and are not interchangeable
-with grid cells.
+    deactivate
 
-The grid-cell subset includes whole cells intersecting Canada's boundary; cells
-are not clipped and capacity is not prorated by overlap area. Oil/gas polygons
-are selected using source-reported Canadian province/territory codes.
+For a deliberate clean data rebuild, remove the generated contents under
+**data\raw** and **data\processed**, but retain those directories and their
+**.gitkeep** files. Then run **canco2-build** again.
 
-Do not merge grid cells and polygons, count a spatial representation as a
-separate storage unit, or aggregate across provider overlap/duplicate flags
-without an explicit source-specific rule.
+## Troubleshooting
 
-## Keep semantic roles separate
+### py or python is not recognized
 
-Use the classification fields before combining records:
+Close and reopen the terminal after installing Python. On Windows, rerun the
+installer and ensure the Python launcher and PATH option are enabled.
 
-```python
-print(
-    assessments.merge(
-        units[["storage_unit_id", "data_class", "capacity_data"]],
-        on="storage_unit_id",
-        how="left",
-        validate="many_to_one",
-    ).groupby(
-        ["data_class", "assessment_type", "capacity_data"],
-        dropna=False,
-    ).size()
-)
-```
+### canco2-build is not recognized
 
-Interpret the roles as follows:
+Confirm that **(.venv)** is visible, then run:
 
-- `geological_storage_capacity`: quantitative source-reported storage-resource estimates;
-- `geological_prospectivity`: geological screening evidence such as Atlantic COS, not tonnes;
-- `regulatory_tenure`: agreement or rights evidence, not geological capacity.
+    python -m pip install -e .
+    python scripts\build_all.py
 
-For mapping, keep these outputs separate:
+### A download fails
 
-```python
-capacity_features = features.loc[
-    features["data_class"].eq("geological_storage_capacity")
-]
-prospectivity_features = features.loc[
-    features["data_class"].eq("geological_prospectivity")
-]
-tenure_features = tenure
-```
+Check the internet connection and run **canco2-build** again. Existing valid
+downloads are reused where supported.
 
-## Provenance and QA
+### A build fails after source data changes
 
-The GeoPackage exposes these registered attribute tables through `gpkg_contents`:
+Read the final error in the terminal before deleting anything. The workflow is
+designed to stop when a provider changes an expected file or schema.
 
-- `source_catalog_canada_geological_storage_unified`
-- `source_metadata_canada_geological_storage_unified`
-- `source_qa_canada_geological_storage_unified`
-- `metadata_canada_geological_storage_unified`
-- `qa_canada_geological_storage_unified`
+## Where to learn more
 
-The companion CSV files beside the GeoPackage are convenient for spreadsheet
-inspection, but the GeoPackage tables are the authoritative package contents.
-
-## Run the example
-
-From the repository root:
-
-```bash
-python examples/unified_quickstart.py
-```
-
-The example reads the GeoPackage, validates the expected tables and joins, and
-prints capacity, NATCARB, semantic-role, and provenance summaries. It does not
-write or modify the GeoPackage.
-
-For the stable schema contract and source-specific limitations, see
-[`docs/schema.md`](schema.md) and [`docs/workflow.md`](workflow.md).
+- [Data catalog](data-catalog.md): maps, source layers, and dataset meaning
+- [Schema contract](schema.md): canonical tables and field definitions
+- [Workflow guide](workflow.md): selective builds, validation, and reruns
+- [NATCARB guide](datasets/natcarb.md): detailed NATCARB decomposition
+- [Northeast BC guide](datasets/bc-storage-atlas.md): pool and aquifer details
+- [GSC Atlantic guide](datasets/gsc-atlantic.md): all 15 COS source layers
+- [AER agreements guide](datasets/aer-agreements.md): tenure and source tracts

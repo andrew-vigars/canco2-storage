@@ -56,7 +56,7 @@ universal storage-resource estimate:
 | --- | --- |
 | `assessment_type` | The source assessment or product type |
 | `data_class` | Repository classification such as `geological_prospectivity`, `geological_storage_capacity`, or `regulatory_tenure` |
-| `capacity_data` | Whether the record carries quantitative source capacity or storage-resource estimates |
+| `capacity_data` | Whether the source representation is capacity-bearing; `True` means quantitative estimates may be supplied, not that every row has a non-null estimate |
 | `source_dataset` | Source dataset identity |
 | `source_crs` | CRS of the source geometry, when applicable |
 
@@ -75,7 +75,11 @@ The following roles are intentionally orthogonal:
 | `regulatory_tenure` | Rights, agreements, permits, or other regulatory spatial evidence | AER agreements |
 
 `capacity_data = False` means that quantitative capacity must not be inferred
-from the layer. Null capacity is absence of an estimate, not zero capacity.
+from the layer. `capacity_data = True` is a semantic classification, not a
+completeness flag. Check the applicable fields in `storage_assessments` and
+source-specific assessment/status fields to determine whether an estimate is
+present for a particular record. Null capacity is absence of an estimate, not
+zero capacity.
 `injectivity_status` is separate from both capacity and prospectivity and must
 not be inferred from either one.
 
@@ -185,7 +189,7 @@ The dataset is classified as `qualitative_chance_of_success` and
 
 The five spatial representations remain separate:
 
-| Name | Representation | Capacity flag |
+| Name | Representation | Capacity-bearing representation? |
 | --- | --- | --- |
 | `saline_resource_cells` | Saline 10 km resource grid cells | true |
 | `saline_resource_areas` | Saline resource extent polygons | false |
@@ -200,8 +204,15 @@ inventory and field dictionary.
 
 Grid and polygon layers are different source representations, not parent-child
 rows. Provider `ASSESSED`, `OVERLAP`, `DUPLICATE`, and P50-method semantics are
-preserved. The harmonizer does not remove duplicates, aggregate overlaps, or
-infer relationships between representations.
+preserved in the daughter package. The harmonizer does not remove duplicates,
+aggregate overlaps, or infer relationships between representations.
+
+The provider flags and their domain tables are not fields or standalone tables
+in the unified canonical schema. To inspect them, use the matching NATCARB
+daughter layer directly or link `storage_features.source_feature_id` in the
+unified package to `natcarb_id` in that daughter layer. First filter the unified
+features to the corresponding NATCARB `source_layer`; identifiers must not be
+joined across different source representations.
 
 ### `canada_geological_storage_unified`
 
@@ -215,6 +226,21 @@ It contains:
 | `storage_features` | `features` | One spatial representation of a storage unit |
 | `storage_assessments` | `attributes` | One capacity, prospectivity, or related assessment record |
 | `administrative_features` | `features` | One regulatory or tenure feature |
+
+`storage_assessments` uses `assessment_scope` to declare the grain of each
+record and therefore its valid join key:
+
+| `assessment_scope` | Join target | Join key | Current sources |
+| --- | --- | --- | --- |
+| `feature` | `storage_features` | `storage_feature_id` | GSC Atlantic and NATCARB |
+| `unit` | `storage_units` | `storage_unit_id` | BC pools and aquifers |
+
+Filter `storage_assessments` to one scope before joining. In particular, do not
+join the complete assessment table to `storage_features` on `storage_unit_id`:
+that would repeat a unit-scoped assessment for every mapped feature belonging
+to the unit. `storage_assessment_id` identifies the assessment record itself;
+it is not a join key to either parent table. AER regulatory records are stored
+in `administrative_features` and do not have storage-assessment rows.
 
 The unified package also retains a normalized source catalog, complete
 precursor metadata and QA lineage, unified metadata, and unified QA tables.
@@ -270,10 +296,11 @@ with different meanings or units:
 | --- | --- |
 | `storage_unit_id` | Stable identifier for one logical storage object; never a spatial-part count |
 | `storage_feature_id` or `feature_id` | Stable identifier for one spatial feature where the layer is feature-grained |
+| `assessment_scope` | Grain of an assessment record: `feature` joins by `storage_feature_id`; `unit` joins by `storage_unit_id` |
 | `source_dataset` | Repository source dataset identity |
 | `assessment_type` | Assessment or product type represented by the record |
 | `data_class` | One of the documented semantic roles, where applicable |
-| `capacity_data` | Boolean declaration that quantitative source capacity is present |
+| `capacity_data` | Boolean declaration that the source representation is capacity-bearing; value availability must be checked in the applicable assessment fields |
 | `geometry` | Spatial geometry in EPSG:3978 for feature layers |
 
 Logical-unit tables and spatial-feature tables are different grains. A spatial
@@ -282,15 +309,17 @@ explicitly defines additive values at that grain.
 
 ## Querying guidance
 
-For a first analysis, start with the
-[researcher quickstart](quickstart.md), which reads the unified GeoPackage
-directly and demonstrates the grain-safe assessment joins.
+For installation, building, and opening the atlas in ArcGIS Pro or QGIS, start
+with the [beginner quickstart](quickstart.md). For table selection, filtering,
+and grain-safe assessment joins, use the compact matrix in the
+[data catalog](data-catalog.md).
 
 Use the logical-unit tables for BC capacity summaries. Use the unified
 `storage_units` and `storage_assessments` tables for cross-source analysis while
 retaining `source_dataset` and `source_layer`. Use source Silver `storage_units`
 for GSC prospectivity analysis, AER agreement or tract layers for tenure
 analysis, and select a NATCARB representation explicitly while inspecting
-provider flags before aggregation. The unified view preserves these
-distinctions and must not coerce absent capacity or injectivity values into
-zero.
+provider flags in the NATCARB daughter package before aggregation. Those flags
+are not copied into the unified canonical tables. The unified view preserves
+the source-layer distinction and must not coerce absent capacity or
+injectivity values into zero.

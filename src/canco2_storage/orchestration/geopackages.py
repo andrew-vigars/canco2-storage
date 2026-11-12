@@ -176,8 +176,9 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         choices=BRONZE_DATASETS,
         help=(
-            "Dataset IDs to process. Omit to run every dataset registered in "
-            "both Bronze and Silver orchestration layers."
+            "Dataset IDs to process. Omit to acquire all registered Bronze "
+            "datasets and build Silver packages for the four datasets that "
+            "have Silver workflows."
         ),
     )
 

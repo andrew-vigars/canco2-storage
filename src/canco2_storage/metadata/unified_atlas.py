@@ -579,7 +579,17 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate the unified atlas README from its GeoPackage metadata."
     )
-    parser.add_argument("--gpkg", type=Path, default=None)
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--gpkg", type=Path, default=None)
+    source.add_argument(
+        "--project-root",
+        type=Path,
+        default=None,
+        help=(
+            "Repository root whose data/processed/unified_storage directory "
+            "contains the GeoPackage."
+        ),
+    )
     parser.add_argument("--output", type=Path, default=None)
     return parser.parse_args()
 
@@ -588,7 +598,14 @@ def main() -> None:
     """Generate the unified atlas README."""
 
     args = parse_args()
-    gpkg_path = args.gpkg if args.gpkg is not None else discover_unified_gpkg()
+    if args.gpkg is not None:
+        gpkg_path = args.gpkg
+    elif args.project_root is not None:
+        gpkg_path = discover_unified_gpkg(
+            args.project_root / "data" / "processed" / "unified_storage"
+        )
+    else:
+        gpkg_path = discover_unified_gpkg()
     readme_path = generate_readme(gpkg_path, output_path=args.output)
     print("Unified atlas metadata")
     print("----------------------")

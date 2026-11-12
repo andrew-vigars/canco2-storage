@@ -47,7 +47,12 @@ def build_unified(
     run_module(HARMONIZE_MODULE, harmonize_arguments)
 
     if validate_existing is None:
-        metadata_arguments = [] if output is None else ["--gpkg", str(output)]
+        if output is not None:
+            metadata_arguments = ["--gpkg", str(output)]
+        elif project_root is not None:
+            metadata_arguments = ["--project-root", str(project_root)]
+        else:
+            metadata_arguments = []
         run_module(METADATA_MODULE, metadata_arguments)
 
 

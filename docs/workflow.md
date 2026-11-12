@@ -220,7 +220,11 @@ canco2-build-unified --validate-existing path/to/unified.gpkg
 
 `--validate-existing` cannot be combined with `--project-root` or `--output`.
 The latter two options configure the unified stage; in `canco2-build`, they do
-not redirect the precursor acquisition or Silver workflows.
+not redirect the precursor acquisition or Silver workflows. When
+`--project-root` is used without `--output`, the unified README and CSV
+companions are generated from the newly built GeoPackage beneath that alternate
+root. When `--output` is supplied, the README and companions are generated
+beside that explicit GeoPackage path.
 
 ### Rerun after a failure
 

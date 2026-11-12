@@ -75,6 +75,62 @@ def test_unified_runs_harmonization_before_metadata(monkeypatch) -> None:
     ]
 
 
+def test_unified_passes_project_root_to_metadata(monkeypatch) -> None:
+    """Generate documentation from the same alternate project root."""
+
+    calls: list[tuple[str, list[str] | None]] = []
+    monkeypatch.setattr(
+        unified,
+        "run_module",
+        lambda module_name, arguments=None: calls.append((module_name, arguments)),
+    )
+
+    project_root = Path("alternate-project")
+    unified.build_unified(project_root=project_root)
+
+    assert calls == [
+        (
+            unified.HARMONIZE_MODULE,
+            ["--project-root", str(project_root)],
+        ),
+        (
+            unified.METADATA_MODULE,
+            ["--project-root", str(project_root)],
+        ),
+    ]
+
+
+def test_unified_custom_output_is_metadata_source(monkeypatch) -> None:
+    """Use an explicit unified output as the documentation source."""
+
+    calls: list[tuple[str, list[str] | None]] = []
+    monkeypatch.setattr(
+        unified,
+        "run_module",
+        lambda module_name, arguments=None: calls.append((module_name, arguments)),
+    )
+
+    project_root = Path("alternate-project")
+    output = Path("custom") / "unified.gpkg"
+    unified.build_unified(project_root=project_root, output=output)
+
+    assert calls == [
+        (
+            unified.HARMONIZE_MODULE,
+            [
+                "--project-root",
+                str(project_root),
+                "--output",
+                str(output),
+            ],
+        ),
+        (
+            unified.METADATA_MODULE,
+            ["--gpkg", str(output)],
+        ),
+    ]
+
+
 def test_build_all_runs_geopackages_before_unified(monkeypatch) -> None:
     """Run the precursor GeoPackages before the unified atlas."""
 

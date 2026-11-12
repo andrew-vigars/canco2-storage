@@ -18,6 +18,9 @@ ACQUISITION_MODULES: dict[str, str] = {
     "statcan_digital_boundaries": (
         "canco2_storage.acquisition.statcan_digital_boundaries"
     ),
+    "statcan_cartographic_boundaries": (
+        "canco2_storage.acquisition.statcan_cartographic_boundaries"
+    ),
     "aer_agreements": "canco2_storage.acquisition.aer_agreements",
     "gbc_ne_atlas": "canco2_storage.acquisition.gbc_ne_atlas",
     "gsc_atlantic": "canco2_storage.acquisition.gsc_atlantic",

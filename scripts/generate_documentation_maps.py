@@ -16,6 +16,7 @@ from typing import Iterable
 
 import geopandas as gpd
 import pandas as pd
+from shapely import union_all
 from shapely.geometry import GeometryCollection, MultiPolygon, Polygon, box
 
 
@@ -25,16 +26,25 @@ BC_DIR = PROJECT_ROOT / "data" / "processed" / "gbc_ne_atlas"
 NATCARB_DIR = PROJECT_ROOT / "data" / "processed" / "natcarb_doe"
 GSC_DIR = PROJECT_ROOT / "data" / "processed" / "gsc_atlantic"
 AER_DIR = PROJECT_ROOT / "data" / "processed" / "aer_agreements"
-BOUNDARY = (
+ANALYTICAL_BOUNDARY = (
     PROJECT_ROOT / "data" / "raw" / "basemaps" / "digital" / "lpr_000a21a_e.shp"
+)
+CARTOGRAPHIC_BOUNDARY = (
+    PROJECT_ROOT
+    / "data"
+    / "raw"
+    / "basemaps"
+    / "cartographic"
+    / "lpr_000b21a_e.shp"
 )
 OUTPUT_DIR = PROJECT_ROOT / "docs" / "images"
 
 INK = "#18312b"
 MUTED = "#587069"
 LAND = "#eef1ec"
-WATER = "#f7faf9"
+WATER = "#dcecf4"
 GRID = "#d9e2de"
+BOUNDARY_STROKE = "#9baea7"
 
 
 @dataclass(frozen=True)
@@ -147,6 +157,24 @@ def _dissolve(frame: gpd.GeoDataFrame, tolerance: float):
     return geometry.simplify(tolerance, preserve_topology=True)
 
 
+def _basemap_geometries(
+    boundary: gpd.GeoDataFrame,
+    clip,
+    tolerance: float,
+):
+    """Return cartographic land and undissolved province outlines."""
+
+    clipped = [
+        geometry.simplify(tolerance, preserve_topology=False).intersection(clip)
+        for geometry in boundary.geometry
+        if geometry is not None and not geometry.is_empty
+    ]
+    clipped = [geometry for geometry in clipped if not geometry.is_empty]
+    provinces = GeometryCollection(clipped)
+    land = union_all(clipped)
+    return land, provinces
+
+
 def _map_svg(
     title: str,
     subtitle: str,
@@ -177,9 +205,10 @@ def _map_svg(
         return origin_x + (x - minx) * scale, origin_y + (maxy - y) * scale
 
     clip = box(minx, miny, maxx, maxy)
-    land = boundary.geometry.union_all().intersection(clip).simplify(
+    land, province_outlines = _basemap_geometries(
+        boundary,
+        clip,
         max(span_x, span_y) / 1200,
-        preserve_topology=True,
     )
     svg = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
@@ -192,9 +221,12 @@ def _map_svg(
         f'<text x="42" y="70" font-family="Segoe UI,Arial,sans-serif" '
         f'font-size="14" fill="{MUTED}">{escape(subtitle)}</text>',
         f'<rect x="{margin_left}" y="{margin_top}" width="{map_width}" '
-        f'height="{map_height}" rx="8" fill="#ffffff" stroke="{GRID}"/>',
-        f'<path d="{_path_data(land, transform)}" fill="{LAND}" stroke="#b3c0ba" '
+        f'height="{map_height}" rx="8" fill="{WATER}" stroke="{GRID}"/>',
+        f'<path d="{_path_data(land, transform)}" fill="{LAND}" '
+        f'stroke="{BOUNDARY_STROKE}" '
         'stroke-width="0.8" fill-rule="evenodd"/>',
+        f'<path d="{_path_data(province_outlines, transform)}" fill="none" '
+        f'stroke="{BOUNDARY_STROKE}" stroke-width="0.65"/>',
     ]
     for layer in layers:
         geometry = GeometryCollection(
@@ -312,14 +344,15 @@ def _atlantic_small_multiples_svg(
             )
 
         clip = box(minx, miny, maxx, maxy)
-        land = boundary.geometry.union_all().intersection(clip).simplify(
+        land, province_outlines = _basemap_geometries(
+            boundary,
+            clip,
             max(span_x, span_y) / 900,
-            preserve_topology=True,
         )
         svg.extend(
             [
                 f'<rect x="{panel_x}" y="{panel_y}" width="{panel_width}" '
-                f'height="{panel_height}" rx="9" fill="#ffffff" stroke="{GRID}"/>',
+                f'height="{panel_height}" rx="9" fill="{WATER}" stroke="{GRID}"/>',
                 f'<text x="{panel_x + 12}" y="{panel_y + 23}" '
                 'font-family="Segoe UI,Arial,sans-serif" font-size="14" '
                 f'font-weight="700" fill="{INK}">{escape(unit_name)}</text>',
@@ -328,7 +361,10 @@ def _atlantic_small_multiples_svg(
                 f'fill="{MUTED}">{escape(assessment_area)} · '
                 f'{len(frame):,} features</text>',
                 f'<path d="{_path_data(land, transform)}" fill="{LAND}" '
-                'stroke="#b3c0ba" stroke-width="0.7" fill-rule="evenodd"/>',
+                f'stroke="{BOUNDARY_STROKE}" stroke-width="0.7" '
+                'fill-rule="evenodd"/>',
+                f'<path d="{_path_data(province_outlines, transform)}" fill="none" '
+                f'stroke="{BOUNDARY_STROKE}" stroke-width="0.55"/>',
             ]
         )
         categories = pd.cut(
@@ -361,8 +397,20 @@ def generate(package: Path, output_dir: Path) -> None:
     features = gpd.read_file(package, layer="storage_features").to_crs(3978)
     units = gpd.read_file(package, layer="storage_units", ignore_geometry=True)
     admin = gpd.read_file(package, layer="administrative_features").to_crs(3978)
-    boundary = gpd.read_file(BOUNDARY).to_crs(3978)
-    canada_bounds = _padded_bounds(boundary, 0.015)
+    boundary = gpd.read_file(CARTOGRAPHIC_BOUNDARY).to_crs(3978)
+    canada_context = gpd.GeoDataFrame(
+        pd.concat(
+            [
+                boundary[["geometry"]],
+                features[["geometry"]],
+                admin[["geometry"]],
+            ],
+            ignore_index=True,
+        ),
+        geometry="geometry",
+        crs=features.crs,
+    )
+    canada_bounds = _padded_bounds(canada_context, 0.015)
 
     sources = [
         ("NATCARB", "NATCARB", "#df8f2d", "#9f5e12"),
@@ -511,7 +559,7 @@ def generate_bc_details(package: Path, output_dir: Path) -> None:
     """Create detailed Northeast BC daughter-package documentation maps."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    boundary = gpd.read_file(BOUNDARY).to_crs(3978)
+    boundary = gpd.read_file(CARTOGRAPHIC_BOUNDARY).to_crs(3978)
 
     pool_features = gpd.read_file(package, layer="pool_features").to_crs(3978)
     pool_units = gpd.read_file(package, layer="pool_units", ignore_geometry=True)
@@ -786,7 +834,7 @@ def generate_gsc_details(package: Path, output_dir: Path) -> None:
     """Create detailed GSC Atlantic source-unit and total-COS maps."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    boundary = gpd.read_file(BOUNDARY).to_crs(3978)
+    boundary = gpd.read_file(CARTOGRAPHIC_BOUNDARY).to_crs(3978)
     atlantic = gpd.read_file(package, layer="storage_units").to_crs(3978)
 
     def unit_frames(group: str) -> list[tuple[str, str, gpd.GeoDataFrame]]:
@@ -835,7 +883,7 @@ def generate_aer_details(package: Path, output_dir: Path) -> None:
     """Create detailed AER agreement-group and tract-hierarchy maps."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    boundary = gpd.read_file(BOUNDARY).to_crs(3978)
+    boundary = gpd.read_file(CARTOGRAPHIC_BOUNDARY).to_crs(3978)
     agreements = gpd.read_file(package, layer="aer_agreements").to_crs(3978)
     tracts = gpd.read_file(package, layer="aer_agreement_tracts").to_crs(3978)
     bounds = _padded_bounds(agreements)
@@ -926,8 +974,9 @@ def generate_natcarb_details(
     """Create detailed NATCARB daughter and Canadian-subset maps."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    boundary = gpd.read_file(BOUNDARY).to_crs(3978)
-    canada_mask = boundary[["geometry"]].dissolve()
+    boundary = gpd.read_file(CARTOGRAPHIC_BOUNDARY).to_crs(3978)
+    analytical_boundary = gpd.read_file(ANALYTICAL_BOUNDARY).to_crs(3978)
+    canada_mask = analytical_boundary[["geometry"]].dissolve()
 
     saline_cells = gpd.read_file(
         package,

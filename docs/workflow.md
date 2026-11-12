@@ -24,7 +24,7 @@ flowchart TD
     Unified --> UnifiedQA["Write and validate unified GeoPackage"]
     UnifiedQA --> Tables["storage_units · storage_features<br/>storage_assessments · administrative_features<br/>Source catalog, metadata, and QA"]
     Tables --> Docs["Generate unified README and CSV sidecars"]
-    Docs --> Use["Beginner setup · GIS use · read-only Python example"]
+    Docs --> Use["Beginner setup · ArcGIS Pro · QGIS"]
 ```
 
 The diagram shows data dependencies. Execution is sequential in registry order:
@@ -321,13 +321,6 @@ storage units, spatial representations, and assessments so spatial feature
 counts cannot silently become capacity multipliers. AER regulatory and tenure
 polygons are written to `administrative_features`, separate from geological
 storage objects.
-
-Optionally run the read-only Python example after a unified build. It opens and
-queries the GeoPackage without creating a second database:
-
-```bash
-python examples/unified_quickstart.py
-```
 
 ## Reproducibility and interpretation
 

@@ -20,10 +20,9 @@ and administrative features remain separate.
 | Build and open the atlas for the first time | [Beginner quickstart](docs/quickstart.md) |
 | Understand fields and table grain | [Schema contract](docs/schema.md) |
 | Rebuild the data products | [Workflow](docs/workflow.md) |
-| Run a working read-only example | `python examples/unified_quickstart.py` |
 
 Install the package with `python -m pip install -e .` before running the
-commands or examples. The [workflow guide](docs/workflow.md) documents build
+commands. The [workflow guide](docs/workflow.md) documents build
 dependencies, selective reruns, validation, and the complete pipeline diagram.
 
 ## Workflow and data structure
@@ -219,7 +218,6 @@ canco2-storage/
 │   ├── raw/                  # retained Bronze inputs
 │   └── processed/            # source Silver packages and unified atlas
 ├── docs/                     # guides, catalog, schema, and workflow
-├── examples/                 # executable read-only examples
 ├── notebooks/                # exploratory source analysis
 ├── scripts/                  # workflow and documentation entry points
 ├── src/canco2_storage/

@@ -544,9 +544,8 @@ Keywords:
 
 The repository includes `docs/quickstart.md` for beginner installation, build,
 and GIS steps; `docs/data-catalog.md` for table selection, filtering, and
-grain-safe joins; and an executable `examples/unified_quickstart.py` for a
-read-only Python example. The GeoPackage is the primary data artifact; these
-resources do not create a second database or a pre-aggregated capacity layer.
+grain-safe joins. The GeoPackage is the primary data artifact; these guides do
+not create a second database or a pre-aggregated capacity layer.
 NATCARB provider assessed, overlap, duplicate, P50-method, and partnership
 fields remain in the NATCARB daughter package and are not copied into the
 unified canonical tables.

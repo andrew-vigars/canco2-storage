@@ -36,7 +36,7 @@ flowchart LR
         SB["Geoscience BC Atlas<br/>shapefiles and tables"]
         SG["GSC Open File 8996<br/>15 shapefiles"]
         SA["AER agreements<br/>shapefile"]
-        SC["Statistics Canada<br/>national boundary"]
+        SC["Statistics Canada 2021 Census<br/>Digital Boundary File<br/>provinces and territories"]
     end
 
     subgraph bronze["Bronze: retained source files"]
@@ -45,7 +45,7 @@ flowchart LR
         BB["BC Atlas raw package"]
         BG["GSC raw package"]
         BA["AER raw package"]
-        BC["Boundary shapefile"]
+        BC["Census boundary shapefile"]
     end
 
     subgraph silver["Silver: source-specific daughter GeoPackages"]
@@ -89,8 +89,9 @@ flowchart LR
 Bronze files retain the provider inputs. Each Silver daughter preserves its
 source-specific layers, identifiers, metadata, and QA. The unified GeoPackage
 then provides common tables for cross-source queries without treating unlike
-geometries or assessments as interchangeable. The Statistics Canada boundary
-supports Canadian spatial selection; it is not a fifth storage daughter.
+geometries or assessments as interchangeable. The Statistics Canada 2021
+Census Digital Boundary File provides province and territory boundaries for
+Canadian spatial selection; it is not a fifth storage daughter.
 
 The built artifact is under `data/processed/unified_storage/`. To locate the
 newest version programmatically:
